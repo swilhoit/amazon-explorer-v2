@@ -58,11 +58,13 @@ const DataTable = ({ data, priceSegments, summaryData }) => {
     };
 
     const sortedData = [...data].sort((a, b) => {
-        if (a[orderBy] === undefined) return 0;
-        if (order === 'asc') {
-            return a[orderBy] < b[orderBy] ? -1 : 1;
+        if (orderBy) {
+            if (order === 'asc') {
+                return a[orderBy] < b[orderBy] ? -1 : 1;
+            }
+            return a[orderBy] > b[orderBy] ? -1 : 1;
         }
-        return a[orderBy] > b[orderBy] ? -1 : 1;
+        return 0;
     });
 
     if (!data.length) {
@@ -154,7 +156,9 @@ const DataTable = ({ data, priceSegments, summaryData }) => {
                         <TableRow key={index}>
                             {!priceSegments && (
                                 <TableCell style={styles.imageCell}>
-                                    <img src={row.imageUrl} alt={row.title} style={styles.image} />
+                                    <a href={row.amazonUrl} target="_blank" rel="noopener noreferrer">
+                                        <img src={row.imageUrl} alt={row.title} style={styles.image} />
+                                    </a>
                                 </TableCell>
                             )}
                             {!priceSegments && <TableCell className="table-cell">{row.asin}</TableCell>}

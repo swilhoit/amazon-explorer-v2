@@ -69,15 +69,16 @@ const MainComponent = () => {
                         asin: item.id.replace('us/', ''),
                         title: item.attributes.title,
                         brand: item.attributes.brand,
-                        price: item.attributes.price ? item.attributes.price.toFixed(2) : '0.00',
+                        price: parseFloat(item.attributes.price ? item.attributes.price.toFixed(2) : '0.00'),
                         reviews: item.attributes.reviews ? Math.round(item.attributes.reviews) : 0,
                         rating: item.attributes.rating ? item.attributes.rating.toFixed(2) : '0.00',
                         category: item.attributes.category,
                         sales: item.attributes.approximate_30_day_units_sold ? item.attributes.approximate_30_day_units_sold : 0,
                         percentOfTotalSales: 0,
-                        revenue: item.attributes.approximate_30_day_revenue ? item.attributes.approximate_30_day_revenue.toFixed(2) : '0.00',
+                        revenue: parseFloat(item.attributes.approximate_30_day_revenue ? item.attributes.approximate_30_day_revenue.toFixed(2) : '0.00'),
                         percentOfTotalRevenue: 0,
                         imageUrl: item.attributes.image_url,
+                        amazonUrl: `https://www.amazon.com/dp/${item.id.replace('us/', '')}`, // Added amazonUrl
                         sellerType: item.attributes.seller_type,
                         dateFirstAvailable: item.attributes.date_first_available,
                     }));
@@ -102,24 +103,24 @@ const MainComponent = () => {
             });
 
         const totalSales = uniqueResults.reduce((sum, item) => sum + item.sales, 0);
-        const totalRevenue = uniqueResults.reduce((sum, item) => sum + parseFloat(item.revenue), 0);
+        const totalRevenue = uniqueResults.reduce((sum, item) => sum + item.revenue, 0);
 
         const processedResults = uniqueResults.map(item => ({
             ...item,
             percentOfTotalSales: ((item.sales / totalSales) * 100).toFixed(2) + '%',
-            percentOfTotalRevenue: ((parseFloat(item.revenue) / totalRevenue) * 100).toFixed(2) + '%'
+            percentOfTotalRevenue: ((item.revenue / totalRevenue) * 100).toFixed(2) + '%'
         }));
 
         processedResults.sort((a, b) => b.sales - a.sales);
 
-        const averagePrice = (processedResults.reduce((sum, item) => sum + parseFloat(item.price), 0) / processedResults.length).toFixed(2);
+        const averagePrice = (processedResults.reduce((sum, item) => sum + item.price, 0) / processedResults.length).toFixed(2);
         const averageReviews = (processedResults.reduce((sum, item) => sum + item.reviews, 0) / processedResults.length).toFixed(0);
 
         const summary = {
             asin: "Summary",
             title: "",
             brand: "",
-            price: averagePrice,
+            price: parseFloat(averagePrice),
             reviews: averageReviews,
             rating: "",
             category: "",
@@ -157,9 +158,9 @@ const MainComponent = () => {
             }
 
             priceSegments[priceSegment].sales += item.sales;
-            priceSegments[priceSegment].revenue += parseFloat(item.revenue);
+            priceSegments[priceSegment].revenue += item.revenue;
             priceSegments[priceSegment].count += 1;
-            priceSegments[priceSegment].averagePrice += parseFloat(item.price);
+            priceSegments[priceSegment].averagePrice += item.price;
             priceSegments[priceSegment].averageReviews += item.reviews;
             priceSegments[priceSegment].items.push(item);
         });
