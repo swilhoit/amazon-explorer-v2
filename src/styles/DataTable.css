@@ -1,0 +1,25 @@
+.table-cell {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.table-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: inherit;
+}
+
+.summary-row {
+    background-color: #ffff99;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    z-index: 99;
+    color: #000;
+}
+
+.table-container {
+    border-radius: 10px;
+}
