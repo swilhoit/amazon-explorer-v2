@@ -207,7 +207,7 @@ const MainComponent = () => {
             <Container>
                 <Box my={4} display="flex" justifyContent="space-between" alignItems="center">
                     <Typography variant="h4" component="h1" gutterBottom>
-                        Jungle Scout Product Explorer
+                        Amazon Product Explorer
                     </Typography>
                     <IconButton onClick={handleThemeToggle} color="inherit">
                         {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
