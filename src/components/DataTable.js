@@ -1,179 +1,153 @@
 import React, { useState } from 'react';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, TableSortLabel } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
-import '../styles/DataTable.css';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Tooltip } from '@mui/material';
+import { Delete } from '@mui/icons-material';
+import { styled } from '@mui/material/styles';
+import { Link } from 'react-router-dom';
+import Collapse from '@mui/material/Collapse';
 
-const DataTable = ({ data, priceSegments, summaryData }) => {
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('');
+const BigBoldTableCell = styled(TableCell)({
+    fontWeight: 'bold',
+    fontSize: '1.2em',
+    textAlign: 'center',
+});
 
-    const theme = useTheme();
+const TitleCell = styled(TableCell)({
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    maxWidth: '300px',
+    '&:hover': {
+        overflow: 'visible',
+        whiteSpace: 'normal',
+        backgroundColor: '#fff',
+        zIndex: 1000,
+        position: 'relative',
+    },
+});
 
-    const styles = {
-        tableHeader: {
-            position: 'sticky',
-            top: 0,
-            backgroundColor: theme.palette.background.default,
-            zIndex: 2,
-            borderBottom: `1px solid ${theme.palette.divider}`,
-        },
-        summaryRow: {
-            backgroundColor: '#ffff99',
-            fontWeight: 'bold',
-            position: 'sticky',
-            top: 50,
-            zIndex: 1,
-            color: '#000',
-        },
-        imageCell: {
-            position: 'relative',
-        },
-        titleCell: {
-            maxWidth: 200,
-            whiteSpace: 'normal',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-        },
-        brandCell: {
-            maxWidth: 100,
-        },
-        tableContainer: {
-            borderRadius: '10px',
-            backgroundColor: theme.palette.background.paper,
-        },
-        image: {
-            width: 50,
-            height: 50,
-            objectFit: 'cover',
-        }
-    };
+const StyledTableCell = styled(TableCell)({
+    backgroundColor: '#e0e0e0',
+    fontWeight: 'bold',
+});
 
-    const handleRequestSort = (property) => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
-    };
-
-    const sortedData = [...data].sort((a, b) => {
-        if (orderBy) {
-            if (order === 'asc') {
-                return a[orderBy] < b[orderBy] ? -1 : 1;
-            }
-            return a[orderBy] > b[orderBy] ? -1 : 1;
-        }
-        return 0;
-    });
-
-    if (!data.length) {
-        console.log('No data to display');
-        return null;
-    }
-
-    console.log('Displaying data:', data);
-
-    const formatCurrency = (value) => `$${parseFloat(value).toFixed(2)}`.toString();
+const DataTable = ({ data, summaryData, resultsCount, queriedKeywords, setData, updateSummary, handleDeleteRow }) => {
+    const [expandedSegments, setExpandedSegments] = useState({});
 
     return (
-        <TableContainer component={Paper} style={styles.tableContainer}>
-            <Table>
+        <TableContainer component={Paper}>
+            <Table size="small">
                 <TableHead>
-                    <TableRow style={styles.tableHeader}>
-                        {!priceSegments && <TableCell>Image</TableCell>}
-                        {!priceSegments && <TableCell>ASIN</TableCell>}
-                        {!priceSegments && <TableCell>Title</TableCell>}
-                        <TableCell>
-                            <TableSortLabel
-                                active={orderBy === 'price'}
-                                direction={orderBy === 'price' ? order : 'asc'}
-                                onClick={() => handleRequestSort('price')}
-                            >
-                                {priceSegments ? "Price Range" : "Price"}
-                            </TableSortLabel>
-                        </TableCell>
-                        {priceSegments && <TableCell>Product Count</TableCell>}
-                        {!priceSegments && <TableCell style={styles.brandCell}>Brand</TableCell>}
-                        <TableCell>
-                            <TableSortLabel
-                                active={orderBy === 'sales'}
-                                direction={orderBy === 'sales' ? order : 'asc'}
-                                onClick={() => handleRequestSort('sales')}
-                            >
-                                Sales
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell>
-                            <TableSortLabel
-                                active={orderBy === 'percentOfTotalSales'}
-                                direction={orderBy === 'percentOfTotalSales' ? order : 'asc'}
-                                onClick={() => handleRequestSort('percentOfTotalSales')}
-                            >
-                                % of Total Sales
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell>
-                            <TableSortLabel
-                                active={orderBy === 'revenue'}
-                                direction={orderBy === 'revenue' ? order : 'asc'}
-                                onClick={() => handleRequestSort('revenue')}
-                            >
-                                Revenue
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell>
-                            <TableSortLabel
-                                active={orderBy === 'percentOfTotalRevenue'}
-                                direction={orderBy === 'percentOfTotalRevenue' ? order : 'asc'}
-                                onClick={() => handleRequestSort('percentOfTotalRevenue')}
-                            >
-                                % of Total Revenue
-                            </TableSortLabel>
-                        </TableCell>
-                        {!priceSegments && <TableCell>Seller Type</TableCell>}
-                        {!priceSegments && <TableCell>Date First Available</TableCell>}
-                        {!priceSegments && <TableCell>Category</TableCell>}
+                    <TableRow>
+                        <StyledTableCell>Image</StyledTableCell>
+                        <StyledTableCell>ASIN</StyledTableCell>
+                        <StyledTableCell>Title</StyledTableCell>
+                        <StyledTableCell>Brand</StyledTableCell>
+                        <StyledTableCell>Price</StyledTableCell>
+                        <StyledTableCell>Reviews</StyledTableCell>
+                        <StyledTableCell>Rating</StyledTableCell>
+                        <StyledTableCell>Sales</StyledTableCell>
+                        <StyledTableCell>Percent of Total Sales</StyledTableCell>
+                        <StyledTableCell>Revenue</StyledTableCell>
+                        <StyledTableCell>Percent of Total Revenue</StyledTableCell>
+                        <StyledTableCell>Seller Type</StyledTableCell>
+                        <StyledTableCell>Date First Available</StyledTableCell>
+                        <StyledTableCell>Category</StyledTableCell>
+                        <StyledTableCell>Actions</StyledTableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                    <TableRow key="summary" style={styles.summaryRow}>
-                        {!priceSegments && <TableCell />}
-                        {!priceSegments && <TableCell className="table-cell">{summaryData.asin}</TableCell>}
-                        {!priceSegments && <TableCell className="table-cell"></TableCell>}
-                        <TableCell className="table-cell">{priceSegments ? summaryData.title : formatCurrency(summaryData.price)}</TableCell>
-                        {priceSegments && <TableCell className="table-cell">{summaryData.count}</TableCell>}
-                        {!priceSegments && <TableCell className="table-cell" style={styles.brandCell}>{summaryData.brand}</TableCell>}
-                        <TableCell className="table-cell">{summaryData.sales}</TableCell>
-                        <TableCell className="table-cell">{summaryData.percentOfTotalSales}</TableCell>
-                        <TableCell className="table-cell">{formatCurrency(summaryData.revenue)}</TableCell>
-                        <TableCell className="table-cell">{summaryData.percentOfTotalRevenue}</TableCell>
-                        {!priceSegments && <TableCell className="table-cell">{summaryData.sellerType}</TableCell>}
-                        {!priceSegments && <TableCell className="table-cell">{summaryData.dateFirstAvailable}</TableCell>}
-                        {!priceSegments && <TableCell className="table-cell">{summaryData.category}</TableCell>}
-                    </TableRow>
-                    {sortedData.slice(1).map((row, index) => (
-                        <TableRow key={index}>
-                            {!priceSegments && (
-                                <TableCell style={styles.imageCell}>
-                                    <a href={row.amazonUrl} target="_blank" rel="noopener noreferrer">
-                                        <img src={row.imageUrl} alt={row.title} style={styles.image} />
-                                    </a>
-                                </TableCell>
+                    {data.map((row, index) => (
+                        <React.Fragment key={index}>
+                            {row.asin === "Summary" ? (
+                                <TableRow>
+                                    <StyledTableCell></StyledTableCell>
+                                    <StyledTableCell></StyledTableCell>
+                                    <StyledTableCell>{row.asin}</StyledTableCell>
+                                    <StyledTableCell></StyledTableCell>
+                                    <StyledTableCell>{row.price}</StyledTableCell>
+                                    <StyledTableCell>{row.reviews}</StyledTableCell>
+                                    <StyledTableCell></StyledTableCell>
+                                    <StyledTableCell>{row.sales}</StyledTableCell>
+                                    <StyledTableCell>{row.percentOfTotalSales}</StyledTableCell>
+                                    <StyledTableCell>{row.revenue}</StyledTableCell>
+                                    <StyledTableCell>{row.percentOfTotalRevenue}</StyledTableCell>
+                                    <StyledTableCell></StyledTableCell>
+                                    <StyledTableCell></StyledTableCell>
+                                    <StyledTableCell></StyledTableCell>
+                                    <StyledTableCell></StyledTableCell>
+                                </TableRow>
+                            ) : (
+                                <TableRow>
+                                    <TableCell>
+                                        <Link to={row.amazonUrl} target="_blank">
+                                            <img src={row.imageUrl} alt={row.title} style={{ width: 50 }} />
+                                        </Link>
+                                    </TableCell>
+                                    <TableCell>{row.asin}</TableCell>
+                                    <Tooltip title={row.title} placement="top">
+                                        <TitleCell>{row.title}</TitleCell>
+                                    </Tooltip>
+                                    <TableCell>{row.brand}</TableCell>
+                                    <TableCell>{row.price}</TableCell>
+                                    <TableCell>{row.reviews}</TableCell>
+                                    <TableCell>{row.rating}</TableCell>
+                                    <TableCell>{row.sales}</TableCell>
+                                    <TableCell>{row.percentOfTotalSales}</TableCell>
+                                    <TableCell>{row.revenue}</TableCell>
+                                    <TableCell>{row.percentOfTotalRevenue}</TableCell>
+                                    <TableCell>{row.sellerType}</TableCell>
+                                    <TableCell>{row.dateFirstAvailable}</TableCell>
+                                    <TableCell>{row.category}</TableCell>
+                                    <TableCell>
+                                        <IconButton size="small" onClick={() => handleDeleteRow(row.asin)}>
+                                            <Delete />
+                                        </IconButton>
+                                    </TableCell>
+                                </TableRow>
                             )}
-                            {!priceSegments && <TableCell className="table-cell">{row.asin}</TableCell>}
-                            {!priceSegments && <TableCell className="table-cell" style={styles.titleCell}>{row.title}</TableCell>}
-                            <TableCell className="table-cell">{priceSegments ? row.title : formatCurrency(row.price)}</TableCell>
-                            {priceSegments && <TableCell className="table-cell">{row.productCount}</TableCell>}
-                            {!priceSegments && <TableCell className="table-cell" style={styles.brandCell}>{row.brand}</TableCell>}
-                            <TableCell className="table-cell">{row.sales}</TableCell>
-                            <TableCell className="table-cell">{row.percentOfTotalSales}</TableCell>
-                            <TableCell className="table-cell">{formatCurrency(row.revenue)}</TableCell>
-                            <TableCell className="table-cell">{row.percentOfTotalRevenue}</TableCell>
-                            {!priceSegments && <TableCell className="table-cell">{row.sellerType}</TableCell>}
-                            {!priceSegments && <TableCell className="table-cell">{row.dateFirstAvailable}</TableCell>}
-                            {!priceSegments && <TableCell className="table-cell">{row.category}</TableCell>}
-                        </TableRow>
+                            {row.items && (
+                                <TableRow>
+                                    <TableCell colSpan={15} style={{ padding: 0, border: 0 }}>
+                                        <Collapse in={expandedSegments[row.asin]} timeout="auto" unmountOnExit>
+                                            <Table size="small">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <StyledTableCell>Image</StyledTableCell>
+                                                        <StyledTableCell>Title</StyledTableCell>
+                                                        <StyledTableCell>Price</StyledTableCell>
+                                                        <StyledTableCell>Reviews</StyledTableCell>
+                                                        <StyledTableCell>Sales</StyledTableCell>
+                                                        <StyledTableCell>Revenue</StyledTableCell>
+                                                        <StyledTableCell>Actions</StyledTableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {row.items.map((item, itemIndex) => (
+                                                        <TableRow key={itemIndex} style={{ backgroundColor: '#f9f9f9' }}>
+                                                            <TableCell>
+                                                                <Link to={item.amazonUrl} target="_blank">
+                                                                    <img src={item.imageUrl} alt={item.title} style={{ width: 50 }} />
+                                                                </Link>
+                                                            </TableCell>
+                                                            <TableCell>{item.title}</TableCell>
+                                                            <TableCell>{item.price}</TableCell>
+                                                            <TableCell>{item.reviews}</TableCell>
+                                                            <TableCell>{item.sales}</TableCell>
+                                                            <TableCell>{item.revenue}</TableCell>
+                                                            <TableCell>
+                                                                <IconButton size="small" onClick={() => handleDeleteRow(item.asin)}>
+                                                                    <Delete />
+                                                                </IconButton>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </Collapse>
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </React.Fragment>
                     ))}
                 </TableBody>
             </Table>
