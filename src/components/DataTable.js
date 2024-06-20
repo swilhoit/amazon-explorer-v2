@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Tooltip } from '@mui/material';
+import {
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+    IconButton, Tooltip, Pagination
+} from '@mui/material';
 import { Delete } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { Link } from 'react-router-dom';
 import Collapse from '@mui/material/Collapse';
-
-const BigBoldTableCell = styled(TableCell)({
-    fontWeight: 'bold',
-    fontSize: '1.2em',
-    textAlign: 'center',
-});
 
 const TitleCell = styled(TableCell)({
     whiteSpace: 'nowrap',
@@ -30,8 +27,16 @@ const StyledTableCell = styled(TableCell)({
     fontWeight: 'bold',
 });
 
-const DataTable = ({ data, summaryData, resultsCount, queriedKeywords, setData, updateSummary, handleDeleteRow }) => {
+const DataTable = ({ data, summaryData, resultsCount, queriedKeywords, setData, updateSummary, handleDeleteRow, updateResultsCount }) => {
     const [expandedSegments, setExpandedSegments] = useState({});
+    const [page, setPage] = useState(1);
+    const rowsPerPage = 25;
+
+    const handlePageChange = (event, newPage) => {
+        setPage(newPage);
+    };
+
+    const paginatedData = data.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
     return (
         <TableContainer component={Paper}>
@@ -52,11 +57,12 @@ const DataTable = ({ data, summaryData, resultsCount, queriedKeywords, setData, 
                         <StyledTableCell>Seller Type</StyledTableCell>
                         <StyledTableCell>Date First Available</StyledTableCell>
                         <StyledTableCell>Category</StyledTableCell>
+                        <StyledTableCell>Number of Products</StyledTableCell>
                         <StyledTableCell>Actions</StyledTableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                    {data.map((row, index) => (
+                    {paginatedData.map((row, index) => (
                         <React.Fragment key={index}>
                             {row.asin === "Summary" ? (
                                 <TableRow>
@@ -74,6 +80,7 @@ const DataTable = ({ data, summaryData, resultsCount, queriedKeywords, setData, 
                                     <StyledTableCell></StyledTableCell>
                                     <StyledTableCell></StyledTableCell>
                                     <StyledTableCell></StyledTableCell>
+                                    <StyledTableCell>{row.productCount || '-'}</StyledTableCell>
                                     <StyledTableCell></StyledTableCell>
                                 </TableRow>
                             ) : (
@@ -98,6 +105,7 @@ const DataTable = ({ data, summaryData, resultsCount, queriedKeywords, setData, 
                                     <TableCell>{row.sellerType}</TableCell>
                                     <TableCell>{row.dateFirstAvailable}</TableCell>
                                     <TableCell>{row.category}</TableCell>
+                                    <TableCell>{row.productCount || '-'}</TableCell>
                                     <TableCell>
                                         <IconButton size="small" onClick={() => handleDeleteRow(row.asin)}>
                                             <Delete />
@@ -107,7 +115,7 @@ const DataTable = ({ data, summaryData, resultsCount, queriedKeywords, setData, 
                             )}
                             {row.items && (
                                 <TableRow>
-                                    <TableCell colSpan={15} style={{ padding: 0, border: 0 }}>
+                                    <TableCell colSpan={16} style={{ padding: 0, border: 0 }}>
                                         <Collapse in={expandedSegments[row.asin]} timeout="auto" unmountOnExit>
                                             <Table size="small">
                                                 <TableHead>
@@ -151,6 +159,13 @@ const DataTable = ({ data, summaryData, resultsCount, queriedKeywords, setData, 
                     ))}
                 </TableBody>
             </Table>
+            <Pagination
+                count={Math.ceil(data.length / rowsPerPage)}
+                page={page}
+                onChange={handlePageChange}
+                color="primary"
+                sx={{ marginTop: 2, marginBottom: 2 }}
+            />
         </TableContainer>
     );
 };

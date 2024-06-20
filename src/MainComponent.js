@@ -11,6 +11,7 @@ import DataTable from './components/DataTable';
 import ScatterPlot from './components/ScatterPlot';
 import PieCharts from './components/PieCharts';
 import TimelineChart from './components/TimelineChart';
+import ProductComparison from './components/ProductComparison';
 
 const StyledTableCell = styled(TableCell)({
     backgroundColor: '#d3d3d3',
@@ -48,6 +49,12 @@ const MainComponent = () => {
     const [keywordResults, setKeywordResults] = useState({});
     const [priceSegmentIncrement, setPriceSegmentIncrement] = useState(5);
     const [expandedSegments, setExpandedSegments] = useState({});
+    const [winningProducts, setWinningProducts] = useState([]);
+    const [winnersLoading, setWinnersLoading] = useState(false);
+    const [rainforestCache, setRainforestCache] = useState(() => {
+        const cache = localStorage.getItem('rainforestCache');
+        return cache ? JSON.parse(cache) : {};
+    });
 
     const initialCache = JSON.parse(localStorage.getItem('keywordCache')) || {};
     const [cache, setCache] = useState(initialCache);
@@ -60,6 +67,10 @@ const MainComponent = () => {
         localStorage.setItem('keywordCache', JSON.stringify(cache));
     }, [cache]);
 
+    useEffect(() => {
+        localStorage.setItem('rainforestCache', JSON.stringify(rainforestCache));
+    }, [rainforestCache]);
+
     const handleKeywordsChange = (event) => {
         setKeywords(event.target.value);
         console.log('Keywords changed:', event.target.value);
@@ -67,6 +78,9 @@ const MainComponent = () => {
 
     const handleTabChange = (event, newValue) => {
         setActiveTab(newValue);
+        if (newValue === 2 && winningProducts.length === 0) {
+            fetchWinningProducts();
+        }
     };
 
     const handleFetchData = async () => {
@@ -427,6 +441,111 @@ const MainComponent = () => {
         setData(updatedDataWithSummary);
     };
 
+    const updateResultsCount = (count) => {
+        setResultsCount(count);
+    };
+
+    const fetchWinningProducts = async () => {
+        setWinnersLoading(true); // Start loading indicator for Winners tab
+        const priceSegments = getPriceSegments();
+        const winningAsins = priceSegments.map(segment => segment.items[0].asin); // Assuming the top ASIN in each segment is the winner
+
+        // Check if all winning products are already in cache
+        const cachedWinningProducts = winningAsins.reduce((acc, asin) => {
+            if (rainforestCache[asin]) {
+                acc.push(rainforestCache[asin]);
+            }
+            return acc;
+        }, []);
+
+        if (cachedWinningProducts.length === winningAsins.length) {
+            // All winning products are in cache, no need to fetch
+            const enrichedProducts = cachedWinningProducts.map(product => {
+                const matchingData = data.find(item => item.asin === product.asin);
+                console.log(`Matching data for ASIN ${product.asin}:`, matchingData); // Debug log
+                return {
+                    ...product,
+                    percentOfTotalSales: matchingData?.percentOfTotalSales || 'N/A',
+                    percentOfTotalRevenue: matchingData?.percentOfTotalRevenue || 'N/A',
+                    sales: matchingData?.sales || 'N/A',
+                    reviews: matchingData?.reviews || 'N/A',
+                    revenue: matchingData?.revenue || 'N/A',
+                };
+            });
+            console.log('Enriched Products from Cache:', enrichedProducts); // Debug log
+            setWinningProducts(enrichedProducts);
+            setWinnersLoading(false);
+            return;
+        }
+
+        const asinsToFetch = winningAsins.filter(asin => !rainforestCache[asin]);
+
+        if (asinsToFetch.length > 0) {
+            try {
+                const fetchedProducts = await fetchProductData(asinsToFetch);
+                const enrichedProducts = fetchedProducts.map(product => {
+                    const matchingData = data.find(item => item.asin === product.asin);
+                    console.log(`Matching data for ASIN ${product.asin}:`, matchingData); // Debug log
+                    return {
+                        ...product,
+                        percentOfTotalSales: matchingData?.percentOfTotalSales || 'N/A',
+                        percentOfTotalRevenue: matchingData?.percentOfTotalRevenue || 'N/A',
+                        sales: matchingData?.sales || 'N/A',
+                        reviews: matchingData?.reviews || 'N/A',
+                        revenue: matchingData?.revenue || 'N/A',
+                    };
+                });
+
+                // Update cache
+                setRainforestCache(prevCache => ({
+                    ...prevCache,
+                    ...enrichedProducts.reduce((acc, product) => {
+                        acc[product.asin] = product;
+                        return acc;
+                    }, {})
+                }));
+
+                console.log('Enriched Products after API Call:', enrichedProducts); // Debug log
+                setWinningProducts([...cachedWinningProducts, ...enrichedProducts]);
+            } catch (error) {
+                console.error('Error fetching winning products:', error);
+            }
+        }
+
+        console.log('Winning Products:', winningProducts); // Log the enriched winning products
+        setWinnersLoading(false); // End loading indicator for Winners tab
+    };
+
+    const fetchProductData = async (asins) => {
+        const apiKey = process.env.REACT_APP_RAINFOREST_API_KEY;
+        const amazonDomain = 'amazon.com';
+
+        if (!apiKey) {
+            throw new Error('Rainforest API key is not set. Please set the REACT_APP_RAINFOREST_API_KEY environment variable.');
+        }
+
+        console.log('Using Rainforest API key:', apiKey); // Add this line for debugging
+
+        const promises = asins.map(asin =>
+            axios.get('https://api.rainforestapi.com/request', {
+                params: {
+                    api_key: apiKey,
+                    amazon_domain: amazonDomain,
+                    asin: asin,
+                    type: 'product'
+                }
+            }).then(response => {
+                return response.data.product;
+            }).catch(error => {
+                console.error(`Error fetching data for ASIN ${asin}:`, error);
+                return null;
+            })
+        );
+
+        const products = await Promise.all(promises);
+        return products.filter(product => product !== null); // Filter out any failed requests
+    };
+
     return (
         <Container>
             <Box display="flex" alignItems="center" mb={2} sx={{ marginRight: 1, marginTop: 4 }}>
@@ -489,7 +608,7 @@ const MainComponent = () => {
                 <Tab label="Winners" />
                 <Tab label="Insights" />
             </Tabs>
-            {activeTab === 0 && <DataTable data={data} summaryData={summaryData} resultsCount={resultsCount} queriedKeywords={queriedKeywords} setData={setData} updateSummary={updateSummary} handleDeleteRow={handleDeleteRow} />}
+            {activeTab === 0 && <DataTable data={data} summaryData={summaryData} resultsCount={resultsCount} queriedKeywords={queriedKeywords} setData={setData} updateSummary={updateSummary} handleDeleteRow={handleDeleteRow} updateResultsCount={updateResultsCount} />}
             {activeTab === 1 && (
                 <>
                     <Box mb={2} mt={2}>
@@ -516,6 +635,7 @@ const MainComponent = () => {
                                     <StyledTableCell>Reviews</StyledTableCell>
                                     <StyledTableCell>Sales</StyledTableCell>
                                     <StyledTableCell>Revenue</StyledTableCell>
+                                    <StyledTableCell>Number of Products</StyledTableCell>
                                     <StyledTableCell>Actions</StyledTableCell>
                                 </StyledTableRow>
                             </TableHead>
@@ -528,6 +648,7 @@ const MainComponent = () => {
                                             <StyledTableCell>{segment.reviews}</StyledTableCell>
                                             <StyledTableCell>{segment.sales}</StyledTableCell>
                                             <StyledTableCell>{segment.revenue}</StyledTableCell>
+                                            <StyledTableCell>{segment.productCount}</StyledTableCell>
                                             <StyledTableCell>
                                                 <IconButton size="small" onClick={() => handleSegmentToggle(segment.asin)}>
                                                     {expandedSegments[segment.asin] ? <ExpandLess /> : <ExpandMore />}
@@ -535,7 +656,7 @@ const MainComponent = () => {
                                             </StyledTableCell>
                                         </TableRow>
                                         <TableRow>
-                                            <TableCell colSpan={6} style={{ padding: 0, border: 0 }}>
+                                            <TableCell colSpan={7} style={{ padding: 0, border: 0 }}>
                                                 <Collapse in={expandedSegments[segment.asin]} timeout="auto" unmountOnExit>
                                                     <Table size="small">
                                                         <TableHead>
@@ -553,7 +674,7 @@ const MainComponent = () => {
                                                             {(segment.items || []).map((item, itemIndex) => (
                                                                 <TableRow key={itemIndex} style={{ backgroundColor: '#f9f9f9' }}>
                                                                     <TableCell>
-                                                                        <Link href={item.amazonUrl} target="_blank">
+                                                                        <Link to={item.amazonUrl} target="_blank">
                                                                             <img src={item.imageUrl} alt={item.title} style={{ width: 50 }} />
                                                                         </Link>
                                                                     </TableCell>
@@ -581,7 +702,17 @@ const MainComponent = () => {
                     </TableContainer>
                 </>
             )}
-            {activeTab === 2 && <DataTable data={getPriceSegments().map(segment => segment.items && segment.items[0]).filter(item => item)} summaryData={summaryData} queriedKeywords={queriedKeywords} setData={setData} updateSummary={updateSummary} handleDeleteRow={handleDeleteRow} />}
+            {activeTab === 2 && (
+                <>
+                    {winnersLoading ? (
+                        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+                            <CircularProgress />
+                        </Box>
+                    ) : (
+                        <ProductComparison products={winningProducts} />
+                    )}
+                </>
+            )}
             {activeTab === 3 && (
                 <>
                     <Grid container spacing={2}>
