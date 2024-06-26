@@ -32,7 +32,7 @@ const CustomTooltip = ({ active, payload }) => {
 const ScatterPlot = ({ data }) => {
     const formattedData = data.map(item => ({
         title: item.title,
-        price: parseFloat(item.price),
+        price: item.price,
         sales: item.sales,
         imageUrl: item.imageUrl,
     }));

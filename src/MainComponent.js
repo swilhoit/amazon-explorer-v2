@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     TextField, Button, Typography, Box, CircularProgress, Tabs, Tab,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
@@ -12,6 +11,9 @@ import ScatterPlot from './components/ScatterPlot';
 import PieCharts from './components/PieCharts';
 import TimelineChart from './components/TimelineChart';
 import ProductComparison from './components/ProductComparison';
+import CSVUpload from './components/CSVUpload';
+import { fetchTopKeywords, fetchDataForKeywords, fetchProductDetailsFromRainforest } from './utils/api';
+import { updateSummary, getPriceSegments, processData } from './utils/dataProcessing';
 
 const StyledTableCell = styled(TableCell)({
     backgroundColor: '#d3d3d3',
@@ -37,6 +39,10 @@ const marks = [
     { value: 50, label: '$50' },
 ];
 
+const formatNumberWithCommas = (number) => {
+    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
+
 const MainComponent = () => {
     const [keywords, setKeywords] = useState('');
     const [data, setData] = useState([]);
@@ -50,36 +56,35 @@ const MainComponent = () => {
     const [priceSegmentIncrement, setPriceSegmentIncrement] = useState(5);
     const [expandedSegments, setExpandedSegments] = useState({});
     const [winningProducts, setWinningProducts] = useState([]);
-    const [winnersLoading, setWinnersLoading] = useState(false);
-    const [rainforestCache, setRainforestCache] = useState(() => {
-        const cache = localStorage.getItem('rainforestCache');
-        return cache ? JSON.parse(cache) : {};
-    });
+    const [comparisonProducts, setComparisonProducts] = useState([]);
+    const [selectedForComparison, setSelectedForComparison] = useState([]);
 
     const initialCache = JSON.parse(localStorage.getItem('keywordCache')) || {};
     const [cache, setCache] = useState(initialCache);
 
+    const [order, setOrder] = useState('asc');
+    const [orderBy, setOrderBy] = useState('');
+
     useEffect(() => {
-        console.log("Data updated:", data);
+        console.log("MainComponent: Data state updated", data?.length, "items");
+        console.log("MainComponent: First few items:", data?.slice(0, 3));
     }, [data]);
 
     useEffect(() => {
         localStorage.setItem('keywordCache', JSON.stringify(cache));
     }, [cache]);
 
-    useEffect(() => {
-        localStorage.setItem('rainforestCache', JSON.stringify(rainforestCache));
-    }, [rainforestCache]);
-
     const handleKeywordsChange = (event) => {
         setKeywords(event.target.value);
-        console.log('Keywords changed:', event.target.value);
     };
 
     const handleTabChange = (event, newValue) => {
         setActiveTab(newValue);
         if (newValue === 2 && winningProducts.length === 0) {
             fetchWinningProducts();
+        }
+        if (newValue === 4) {
+            fetchComparisonProducts();
         }
     };
 
@@ -92,7 +97,6 @@ const MainComponent = () => {
         console.log('Fetching data for keywords:', keywords);
 
         if (cache[keywords]) {
-            console.log('Using cached data for keywords:', keywords);
             const cachedData = cache[keywords];
             setData(cachedData.data || []);
             setSummaryData(cachedData.summaryData || null);
@@ -104,60 +108,18 @@ const MainComponent = () => {
             return;
         }
 
-        const apiKey = process.env.REACT_APP_JUNGLE_SCOUT_API_KEY;
-        const keyName = process.env.REACT_APP_JUNGLE_SCOUT_KEY_NAME;
-
-        const headers = {
-            'Authorization': `${keyName}:${apiKey}`,
-            'X-API-Type': 'junglescout',
-            'Accept': 'application/vnd.junglescout.v1+json',
-            'Content-Type': 'application/vnd.api+json',
-        };
-
         try {
-            const topKeywords = await fetchTopKeywords(keywords, headers);
-            console.log('Top Keywords:', topKeywords);
-
+            const topKeywords = await fetchTopKeywords(keywords);
             const uniqueTopKeywords = Array.from(new Set([keywords, ...topKeywords.filter(k => k.toLowerCase() !== keywords.toLowerCase())]));
             setQueriedKeywords(uniqueTopKeywords);
 
-            const allResults = await fetchDataForKeywords(uniqueTopKeywords, headers);
+            const allResults = await fetchDataForKeywords(uniqueTopKeywords);
             const totalResults = allResults.flat();
             const uniqueResults = Array.from(new Set(totalResults.map(item => item.asin)))
                 .map(asin => totalResults.find(item => item.asin === asin));
 
-            const totalSales = uniqueResults.reduce((sum, item) => sum + item.sales, 0);
-            const totalRevenue = uniqueResults.reduce((sum, item) => sum + item.revenue, 0);
-
-            const processedResults = uniqueResults.map(item => ({
-                ...item,
-                percentOfTotalSales: ((item.sales / totalSales) * 100).toFixed(2) + '%',
-                percentOfTotalRevenue: ((item.revenue / totalRevenue) * 100).toFixed(2) + '%',
-                revenue: parseFloat(item.revenue).toFixed(2),
-                price: parseFloat(item.price).toFixed(2),
-            }));
-
-            processedResults.sort((a, b) => b.sales - a.sales);
-
-            const averagePrice = (processedResults.reduce((sum, item) => sum + parseFloat(item.price), 0) / processedResults.length).toFixed(2);
-            const averageReviews = (processedResults.reduce((sum, item) => sum + item.reviews, 0) / processedResults.length).toFixed(0);
-
-            const summary = {
-                asin: "Summary",
-                title: "",
-                brand: "",
-                price: `$${averagePrice}`,
-                reviews: averageReviews,
-                rating: "",
-                category: "",
-                sales: totalSales,
-                percentOfTotalSales: "100%",
-                revenue: `$${parseFloat(totalRevenue).toFixed(2)}`,
-                percentOfTotalRevenue: "100%",
-                imageUrl: "",
-                sellerType: "",
-                dateFirstAvailable: "",
-            };
+            const processedResults = processData(uniqueResults);
+            const summary = updateSummary(processedResults);
 
             setSummaryData(summary);
             setData([summary, ...processedResults]);
@@ -190,198 +152,10 @@ const MainComponent = () => {
             }));
         } catch (error) {
             console.error("Error fetching data:", error);
-            if (error.response) {
-                console.error("Error data:", error.response.data);
-                console.error("Error status:", error.response.status);
-                console.error("Error headers:", error.response.headers);
-            }
+            // TODO: Add user-friendly error message display
         }
 
         setLoading(false);
-    };
-
-    const fetchTopKeywords = async (keyword, headers) => {
-        const url = `https://developer.junglescout.com/api/keywords/keywords_by_keyword_query?marketplace=us&sort=-monthly_search_volume_exact&page[size]=50`;
-        const payload = {
-            data: {
-                type: "keywords_by_keyword_query",
-                attributes: {
-                    search_terms: keyword
-                }
-            }
-        };
-
-        console.log('Payload:', JSON.stringify(payload, null, 2));
-
-        try {
-            const response = await axios.post(url, payload, { headers });
-            console.log("Response data:", response.data);
-            const keywords = response.data.data
-                .sort((a, b) => {
-                    const relevancyA = a.attributes.relevancy_score || a.attributes.monthly_search_volume_exact;
-                    const relevancyB = b.attributes.relevancy_score || b.attributes.monthly_search_volume_exact;
-                    return relevancyB - relevancyA;
-                })
-                .slice(0, 5)
-                .map(item => item.attributes.name);
-
-            return keywords;
-        } catch (error) {
-            console.error("Error fetching top keywords:", error);
-            if (error.response) {
-                console.error("Error response data:", error.response.data);
-            }
-            return [];
-        }
-    };
-
-    const fetchDataForKeywords = async (keywords, headers) => {
-        const baseUrl = "https://developer.junglescout.com/api/product_database_query?marketplace=us&sort=-sales&page[size]=100";
-        const results = [];
-
-        for (const keyword of keywords) {
-            const payload = {
-                data: {
-                    type: "product_database_query",
-                    attributes: {
-                        include_keywords: [keyword],
-                        exclude_unavailable_products: true,
-                        min_sales: 1
-                    }
-                }
-            };
-
-            try {
-                const response = await axios.post(baseUrl, payload, { headers });
-                const keywordResults = processResponse(response);
-                results.push(keywordResults);
-            } catch (error) {
-                console.error(`Error fetching data for keyword "${keyword}":`, error);
-                if (error.response) {
-                    console.error("Error response data:", error.response.data);
-                }
-            }
-        }
-
-        return results;
-    };
-
-    const processResponse = (response) => {
-        if (response.data && response.data.data) {
-            return response.data.data.map(item => ({
-                asin: item.id.replace('us/', ''),
-                title: item.attributes.title,
-                brand: item.attributes.brand,
-                price: parseFloat(item.attributes.price ? item.attributes.price.toFixed(2) : '0.00'),
-                reviews: item.attributes.reviews ? Math.round(item.attributes.reviews) : 0,
-                rating: item.attributes.rating ? item.attributes.rating.toFixed(2) : '0.00',
-                category: item.attributes.category,
-                sales: item.attributes.approximate_30_day_units_sold ? item.attributes.approximate_30_day_units_sold : 0,
-                percentOfTotalSales: 0,
-                revenue: parseFloat(item.attributes.approximate_30_day_revenue ? item.attributes.approximate_30_day_revenue.toFixed(2) : '0.00'),
-                percentOfTotalRevenue: 0,
-                imageUrl: item.attributes.image_url,
-                amazonUrl: `https://www.amazon.com/dp/${item.id.replace('us/', '')}`,
-                sellerType: item.attributes.seller_type,
-                dateFirstAvailable: item.attributes.date_first_available,
-            }));
-        } else {
-            console.error('Invalid response format:', response);
-            return [];
-        }
-    };
-
-    const updateSummary = (updatedData) => {
-        const uniqueResults = updatedData.filter(item => item.asin !== "Summary");
-        const totalSales = uniqueResults.reduce((sum, item) => sum + (item.sales || 0), 0);
-        const totalRevenue = uniqueResults.reduce((sum, item) => sum + (parseFloat(item.revenue) || 0), 0);
-
-        const processedResults = uniqueResults.map(item => ({
-            ...item,
-            percentOfTotalSales: ((item.sales / totalSales) * 100).toFixed(2) + '%',
-            percentOfTotalRevenue: ((item.revenue / totalRevenue) * 100).toFixed(2) + '%',
-            revenue: parseFloat(item.revenue).toFixed(2),
-            price: parseFloat(item.price).toFixed(2),
-        }));
-
-        const averagePrice = (processedResults.reduce((sum, item) => sum + parseFloat(item.price), 0) / processedResults.length).toFixed(2);
-        const averageReviews = (processedResults.reduce((sum, item) => sum + (item.reviews || 0), 0) / processedResults.length).toFixed(0);
-
-        const summary = {
-            asin: "Summary",
-            title: "",
-            brand: "",
-            price: `$${averagePrice}`,
-            reviews: averageReviews,
-            rating: "",
-            category: "",
-            sales: totalSales,
-            percentOfTotalSales: "100%",
-            revenue: `$${parseFloat(totalRevenue).toFixed(2)}`,
-            percentOfTotalRevenue: "100%",
-            imageUrl: "",
-            sellerType: "",
-            dateFirstAvailable: "",
-        };
-
-        setSummaryData(summary);
-        return [summary, ...processedResults];
-    };
-
-    const getPriceSegments = () => {
-        const priceSegments = {};
-
-        data.slice(1).forEach((item) => {
-            const itemPrice = typeof item.price === 'number' ? item.price.toFixed(2) : item.price;
-            const itemRevenue = typeof item.revenue === 'number' ? item.revenue.toFixed(2) : item.revenue;
-            const lowPrice = Math.floor(parseFloat(itemPrice) / priceSegmentIncrement) * priceSegmentIncrement;
-            const highPrice = lowPrice + priceSegmentIncrement - 0.01;
-            const priceSegment = `$${lowPrice.toFixed(2)} - $${highPrice.toFixed(2)}`;
-
-            if (!priceSegments[priceSegment]) {
-                priceSegments[priceSegment] = {
-                    sales: 0,
-                    revenue: 0,
-                    count: 0,
-                    averagePrice: 0,
-                    averageReviews: 0,
-                    items: []
-                };
-            }
-
-            priceSegments[priceSegment].sales += item.sales;
-            priceSegments[priceSegment].revenue += parseFloat(itemRevenue);
-            priceSegments[priceSegment].count += 1;
-            priceSegments[priceSegment].averagePrice += parseFloat(itemPrice);
-            priceSegments[priceSegment].averageReviews += item.reviews;
-            priceSegments[priceSegment].items.push(item);
-        });
-
-        const segmentData = Object.keys(priceSegments).map(segment => {
-            const segmentInfo = priceSegments[segment];
-            return {
-                asin: segment,
-                title: segment,
-                brand: "",
-                price: `$${(segmentInfo.averagePrice / segmentInfo.count).toFixed(2)}`,
-                reviews: (segmentInfo.averageReviews / segmentInfo.count).toFixed(0),
-                rating: "",
-                category: "",
-                sales: segmentInfo.sales,
-                percentOfTotalSales: ((segmentInfo.sales / summaryData.sales) * 100).toFixed(2) + '%',
-                revenue: `$${segmentInfo.revenue.toFixed(2)}`,
-                percentOfTotalRevenue: ((segmentInfo.revenue / parseFloat(summaryData.revenue.replace('$', ''))).toFixed(2)) + '%',
-                imageUrl: "",
-                sellerType: "",
-                dateFirstAvailable: "",
-                items: segmentInfo.items,
-                productCount: segmentInfo.count
-            };
-        }).filter(segment => segment.sales > 0);
-
-        segmentData.sort((a, b) => parseFloat(a.asin.split('-')[0].replace('$', '')) - parseFloat(b.asin.split('-')[0].replace('$', '')));
-
-        return segmentData;
     };
 
     const handleToggleKeyword = (keyword) => {
@@ -394,38 +168,8 @@ const MainComponent = () => {
         const activeKeywords = Object.keys(updatedSelectedKeywords).filter(keyword => updatedSelectedKeywords[keyword]);
         const activeResults = activeKeywords.flatMap(keyword => keywordResults[keyword] || []).filter(item => item);
 
-        const totalSales = activeResults.reduce((sum, item) => sum + (item?.sales || 0), 0);
-        const totalRevenue = activeResults.reduce((sum, item) => sum + (parseFloat(item?.revenue) || 0), 0);
-
-        const processedResults = activeResults.map(item => ({
-            ...item,
-            percentOfTotalSales: ((item.sales / totalSales) * 100).toFixed(2) + '%',
-            percentOfTotalRevenue: ((item.revenue / totalRevenue) * 100).toFixed(2) + '%',
-            revenue: parseFloat(item.revenue).toFixed(2),
-            price: parseFloat(item.price).toFixed(2),
-        }));
-
-        processedResults.sort((a, b) => b.sales - a.sales);
-
-        const averagePrice = (processedResults.reduce((sum, item) => sum + parseFloat(item.price), 0) / processedResults.length).toFixed(2);
-        const averageReviews = (processedResults.reduce((sum, item) => sum + (item.reviews || 0), 0) / processedResults.length).toFixed(0);
-
-        const summary = {
-            asin: "Summary",
-            title: "",
-            brand: "",
-            price: `$${averagePrice}`,
-            reviews: averageReviews,
-            rating: "",
-            category: "",
-            sales: totalSales,
-            percentOfTotalSales: "100%",
-            revenue: `$${parseFloat(totalRevenue).toFixed(2)}`,
-            percentOfTotalRevenue: "100%",
-            imageUrl: "",
-            sellerType: "",
-            dateFirstAvailable: "",
-        };
+        const processedResults = processData(activeResults);
+        const summary = updateSummary(processedResults);
 
         setSummaryData(summary);
         setData([summary, ...processedResults]);
@@ -445,106 +189,75 @@ const MainComponent = () => {
         setResultsCount(count);
     };
 
-    const fetchWinningProducts = async () => {
-        setWinnersLoading(true); // Start loading indicator for Winners tab
-        const priceSegments = getPriceSegments();
-        const winningAsins = priceSegments.map(segment => segment.items[0].asin); // Assuming the top ASIN in each segment is the winner
+    const fetchWinningProducts = () => {
+        const priceSegments = getPriceSegments(data, priceSegmentIncrement, summaryData);
+        const winningProducts = priceSegments.map(segment => segment.items[0]);
+        setWinningProducts(winningProducts);
+    };
 
-        // Check if all winning products are already in cache
-        const cachedWinningProducts = winningAsins.reduce((acc, asin) => {
-            if (rainforestCache[asin]) {
-                acc.push(rainforestCache[asin]);
-            }
-            return acc;
-        }, []);
-
-        if (cachedWinningProducts.length === winningAsins.length) {
-            // All winning products are in cache, no need to fetch
-            const enrichedProducts = cachedWinningProducts.map(product => {
-                const matchingData = data.find(item => item.asin === product.asin);
-                console.log(`Matching data for ASIN ${product.asin}:`, matchingData); // Debug log
-                return {
-                    ...product,
-                    percentOfTotalSales: matchingData?.percentOfTotalSales || 'N/A',
-                    percentOfTotalRevenue: matchingData?.percentOfTotalRevenue || 'N/A',
-                    sales: matchingData?.sales || 'N/A',
-                    reviews: matchingData?.reviews || 'N/A',
-                    revenue: matchingData?.revenue || 'N/A',
-                };
-            });
-            console.log('Enriched Products from Cache:', enrichedProducts); // Debug log
-            setWinningProducts(enrichedProducts);
-            setWinnersLoading(false);
-            return;
-        }
-
-        const asinsToFetch = winningAsins.filter(asin => !rainforestCache[asin]);
-
-        if (asinsToFetch.length > 0) {
+    const fetchComparisonProducts = async () => {
+        const productsForComparison = [];
+        for (const asin of selectedForComparison) {
             try {
-                const fetchedProducts = await fetchProductData(asinsToFetch);
-                const enrichedProducts = fetchedProducts.map(product => {
-                    const matchingData = data.find(item => item.asin === product.asin);
-                    console.log(`Matching data for ASIN ${product.asin}:`, matchingData); // Debug log
-                    return {
-                        ...product,
-                        percentOfTotalSales: matchingData?.percentOfTotalSales || 'N/A',
-                        percentOfTotalRevenue: matchingData?.percentOfTotalRevenue || 'N/A',
-                        sales: matchingData?.sales || 'N/A',
-                        reviews: matchingData?.reviews || 'N/A',
-                        revenue: matchingData?.revenue || 'N/A',
-                    };
-                });
-
-                // Update cache
-                setRainforestCache(prevCache => ({
-                    ...prevCache,
-                    ...enrichedProducts.reduce((acc, product) => {
-                        acc[product.asin] = product;
-                        return acc;
-                    }, {})
-                }));
-
-                console.log('Enriched Products after API Call:', enrichedProducts); // Debug log
-                setWinningProducts([...cachedWinningProducts, ...enrichedProducts]);
+                const productDetails = await fetchProductDetailsFromRainforest(asin);
+                productsForComparison.push(productDetails);
             } catch (error) {
-                console.error('Error fetching winning products:', error);
+                console.error(`Error fetching details for ASIN: ${asin}`, error);
             }
         }
-
-        console.log('Winning Products:', winningProducts); // Log the enriched winning products
-        setWinnersLoading(false); // End loading indicator for Winners tab
+        setComparisonProducts(productsForComparison);
     };
 
-    const fetchProductData = async (asins) => {
-        const apiKey = process.env.REACT_APP_RAINFOREST_API_KEY;
-        const amazonDomain = 'amazon.com';
-
-        if (!apiKey) {
-            throw new Error('Rainforest API key is not set. Please set the REACT_APP_RAINFOREST_API_KEY environment variable.');
-        }
-
-        console.log('Using Rainforest API key:', apiKey); // Add this line for debugging
-
-        const promises = asins.map(asin =>
-            axios.get('https://api.rainforestapi.com/request', {
-                params: {
-                    api_key: apiKey,
-                    amazon_domain: amazonDomain,
-                    asin: asin,
-                    type: 'product'
-                }
-            }).then(response => {
-                return response.data.product;
-            }).catch(error => {
-                console.error(`Error fetching data for ASIN ${asin}:`, error);
-                return null;
-            })
-        );
-
-        const products = await Promise.all(promises);
-        return products.filter(product => product !== null); // Filter out any failed requests
+    const handleCompare = () => {
+        fetchComparisonProducts();
+        setActiveTab(4);  // Navigate to the Comparison tab
     };
+
+    const handleCheckboxChange = (asin) => {
+        setSelectedForComparison(prev => {
+            if (prev.includes(asin)) {
+                return prev.filter(item => item !== asin);
+            } else {
+                return [...prev, asin];
+            }
+        });
+    };
+
+    const handleRequestSort = (property) => {
+        const isAsc = orderBy === property && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(property);
+
+        const sortedData = [...data].sort((a, b) => {
+            if (a[property] < b[property]) {
+                return isAsc ? -1 : 1;
+            }
+            if (a[property] > b[property]) {
+                return isAsc ? 1 : -1;
+            }
+            return 0;
+        });
+
+        setData(sortedData);
+    };
+
+    const handleCSVUpload = useCallback((uploadedData) => {
+        console.log("MainComponent: CSV Upload - Received data", uploadedData.length, "items");
+        console.log("MainComponent: CSV Upload - First few items:", uploadedData.slice(0, 3));
+    
+        setData(uploadedData);
+        setSummaryData(null); // Assuming no summary data from CSV
+        setResultsCount(uploadedData.length);
+        setQueriedKeywords([]);
+        setSelectedKeywords({});
+        setKeywordResults({});
+        
+        // Force a re-render of the DataTable
+        setActiveTab(prevTab => (prevTab === 0 ? 1 : 0));
+        
+        console.log("MainComponent: CSV Upload - State updates complete");
+    }, []);
+    
 
     return (
         <Container>
@@ -559,7 +272,14 @@ const MainComponent = () => {
                 <Button variant="contained" color="primary" onClick={handleFetchData} disabled={loading}>
                     {loading ? <CircularProgress size={24} /> : 'Fetch Data'}
                 </Button>
+                <CSVUpload 
+                    onDataUpload={handleCSVUpload}
+                    setLoading={setLoading}
+                />
             </Box>
+            <Button variant="contained" color="secondary" onClick={handleCompare} disabled={loading || selectedForComparison.length === 0}>
+                Compare
+            </Button>
             <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
                     {queriedKeywords.length > 0 && (
@@ -583,7 +303,7 @@ const MainComponent = () => {
                                                 <TableCell>{(keywordResults[keyword] || []).length || 0}</TableCell>
                                                 <TableCell>
                                                     <Checkbox
-                                                        checked={selectedKeywords[keyword] ?? true} // Ensure checkboxes are checked by default
+                                                        checked={selectedKeywords[keyword] ?? true}
                                                         onChange={() => handleToggleKeyword(keyword)}
                                                     />
                                                 </TableCell>
@@ -607,8 +327,25 @@ const MainComponent = () => {
                 <Tab label="Price Segments" />
                 <Tab label="Winners" />
                 <Tab label="Insights" />
+                <Tab label="Comparison" />
             </Tabs>
-            {activeTab === 0 && <DataTable data={data} summaryData={summaryData} resultsCount={resultsCount} queriedKeywords={queriedKeywords} setData={setData} updateSummary={updateSummary} handleDeleteRow={handleDeleteRow} updateResultsCount={updateResultsCount} />}
+            {activeTab === 0 && (
+                <DataTable
+                    data={data}
+                    summaryData={summaryData}
+                    resultsCount={resultsCount}
+                    queriedKeywords={queriedKeywords}
+                    setData={setData}
+                    updateSummary={updateSummary}
+                    handleDeleteRow={handleDeleteRow}
+                    updateResultsCount={updateResultsCount}
+                    handleCheckboxChange={handleCheckboxChange}
+                    selectedForComparison={selectedForComparison}
+                    handleRequestSort={handleRequestSort}
+                    order={order}
+                    orderBy={orderBy}
+                />
+            )}
             {activeTab === 1 && (
                 <>
                     <Box mb={2} mt={2}>
@@ -632,66 +369,79 @@ const MainComponent = () => {
                                 <StyledTableRow>
                                     <StyledTableCell>Segment</StyledTableCell>
                                     <StyledTableCell>Average Price</StyledTableCell>
+                                    <StyledTableCell>Number of Products</StyledTableCell>
                                     <StyledTableCell>Reviews</StyledTableCell>
                                     <StyledTableCell>Sales</StyledTableCell>
                                     <StyledTableCell>Revenue</StyledTableCell>
-                                    <StyledTableCell>Number of Products</StyledTableCell>
+                                    <StyledTableCell>% of Total Sales</StyledTableCell>
+                                    <StyledTableCell>% of Total Revenue</StyledTableCell>
                                     <StyledTableCell>Actions</StyledTableCell>
                                 </StyledTableRow>
                             </TableHead>
                             <TableBody>
-                                {getPriceSegments().map((segment, index) => (
+                                {getPriceSegments(data, priceSegmentIncrement, summaryData).map((segment, index) => (
                                     <React.Fragment key={index}>
                                         <TableRow>
                                             <StyledTableCell>{segment.title}</StyledTableCell>
                                             <StyledTableCell>{segment.price}</StyledTableCell>
+                                            <StyledTableCell>{segment.productCount}</StyledTableCell>
                                             <StyledTableCell>{segment.reviews}</StyledTableCell>
                                             <StyledTableCell>{segment.sales}</StyledTableCell>
                                             <StyledTableCell>{segment.revenue}</StyledTableCell>
-                                            <StyledTableCell>{segment.productCount}</StyledTableCell>
-                                            <StyledTableCell>
-                                                <IconButton size="small" onClick={() => handleSegmentToggle(segment.asin)}>
-                                                    {expandedSegments[segment.asin] ? <ExpandLess /> : <ExpandMore />}
+                                            <StyledTableCell>{segment.percentOfTotalSales}</StyledTableCell>
+                                            <StyledTableCell>{segment.percentOfTotalRevenue}</StyledTableCell>
+                                            <TableCell>
+                                                <IconButton size="small" onClick={() => handleSegmentToggle(segment.title)}>
+                                                    {expandedSegments[segment.title] ? <ExpandLess /> : <ExpandMore />}
                                                 </IconButton>
-                                            </StyledTableCell>
+                                            </TableCell>
                                         </TableRow>
                                         <TableRow>
-                                            <TableCell colSpan={7} style={{ padding: 0, border: 0 }}>
-                                                <Collapse in={expandedSegments[segment.asin]} timeout="auto" unmountOnExit>
-                                                    <Table size="small">
-                                                        <TableHead>
-                                                            <TableRow>
-                                                                <StyledTableCell>Image</StyledTableCell>
-                                                                <StyledTableCell>Title</StyledTableCell>
-                                                                <StyledTableCell>Price</StyledTableCell>
-                                                                <StyledTableCell>Reviews</StyledTableCell>
-                                                                <StyledTableCell>Sales</StyledTableCell>
-                                                                <StyledTableCell>Revenue</StyledTableCell>
-                                                                <StyledTableCell>Actions</StyledTableCell>
-                                                            </TableRow>
-                                                        </TableHead>
-                                                        <TableBody>
-                                                            {(segment.items || []).map((item, itemIndex) => (
-                                                                <TableRow key={itemIndex} style={{ backgroundColor: '#f9f9f9' }}>
-                                                                    <TableCell>
-                                                                        <Link to={item.amazonUrl} target="_blank">
-                                                                            <img src={item.imageUrl} alt={item.title} style={{ width: 50 }} />
-                                                                        </Link>
-                                                                    </TableCell>
-                                                                    <TableCell>{item.title}</TableCell>
-                                                                    <TableCell>{item.price}</TableCell>
-                                                                    <TableCell>{item.reviews}</TableCell>
-                                                                    <TableCell>{item.sales}</TableCell>
-                                                                    <TableCell>{item.revenue}</TableCell>
-                                                                    <TableCell>
-                                                                        <IconButton size="small" onClick={() => handleDeleteRow(item.asin)}>
-                                                                            <Delete />
-                                                                        </IconButton>
-                                                                    </TableCell>
+                                            <TableCell colSpan={9} style={{ paddingBottom: 0, paddingTop: 0 }}>
+                                                <Collapse in={expandedSegments[segment.title]} timeout="auto" unmountOnExit>
+                                                    <Box margin={1}>
+                                                        <Table size="small" aria-label="purchases">
+                                                            <TableHead>
+                                                                <TableRow>
+                                                                    <TableCell>Checkbox</TableCell>
+                                                                    <TableCell>Image</TableCell>
+                                                                    <TableCell>Title</TableCell>
+                                                                    <TableCell>Price</TableCell>
+                                                                    <TableCell>Reviews</TableCell>
+                                                                    <TableCell>Sales</TableCell>
+                                                                    <TableCell>Revenue</TableCell>
+                                                                    <TableCell>Actions</TableCell>
                                                                 </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
+                                                            </TableHead>
+                                                            <TableBody>
+                                                                {segment.items.map((item, itemIndex) => (
+                                                                    <TableRow key={itemIndex}>
+                                                                        <TableCell>
+                                                                            <Checkbox
+                                                                                checked={selectedForComparison.includes(item.asin)}
+                                                                                onChange={() => handleCheckboxChange(item.asin)}
+                                                                            />
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <Link href={item.amazonUrl} target="_blank" rel="noopener noreferrer">
+                                                                                <img src={item.imageUrl} alt={item.title} style={{ width: 50, height: 50 }} />
+                                                                            </Link>
+                                                                        </TableCell>
+                                                                        <TableCell>{item.title}</TableCell>
+                                                                        <TableCell>{item.price}</TableCell>
+                                                                        <TableCell>{item.reviews}</TableCell>
+                                                                        <TableCell>{item.sales}</TableCell>
+                                                                        <TableCell>{item.revenue}</TableCell>
+                                                                        <TableCell>
+                                                                            <IconButton size="small" onClick={() => handleDeleteRow(item.asin)}>
+                                                                                <Delete />
+                                                                            </IconButton>
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </Box>
                                                 </Collapse>
                                             </TableCell>
                                         </TableRow>
@@ -703,15 +453,21 @@ const MainComponent = () => {
                 </>
             )}
             {activeTab === 2 && (
-                <>
-                    {winnersLoading ? (
-                        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-                            <CircularProgress />
-                        </Box>
-                    ) : (
-                        <ProductComparison products={winningProducts} />
-                    )}
-                </>
+                <DataTable
+                    data={winningProducts}
+                    summaryData={null}
+                    resultsCount={winningProducts.length}
+                    queriedKeywords={[]}
+                    setData={setWinningProducts}
+                    updateSummary={() => { }}
+                    handleDeleteRow={() => { }}
+                    updateResultsCount={() => { }}
+                    handleCheckboxChange={handleCheckboxChange}
+                    selectedForComparison={selectedForComparison}
+                    handleRequestSort={handleRequestSort}
+                    order={order}
+                    orderBy={orderBy}
+                />
             )}
             {activeTab === 3 && (
                 <>
@@ -730,6 +486,9 @@ const MainComponent = () => {
                         <TimelineChart data={data.slice(1)} />
                     </Box>
                 </>
+            )}
+            {activeTab === 4 && (
+                <ProductComparison products={comparisonProducts} />
             )}
         </Container>
     );

@@ -48,7 +48,7 @@ const Layout = () => {
                     <Box display="flex" alignItems="center">
                         <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
                             <Button variant="contained" color="primary" sx={{ marginRight: 2 }}>
-                                Price Points
+                                Dashboard
                             </Button>
                         </Link>
                         <Link to="/related-keywords" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -56,9 +56,10 @@ const Layout = () => {
                                 Related Keywords
                             </Button>
                         </Link>
-                        <Link to="/product-comparison" style={{ textDecoration: 'none', color: 'inherit' }}>
+        
+                        <Link to="/keyword-generator" style={{ textDecoration: 'none', color: 'inherit' }}>
                             <Button variant="contained" color="primary" sx={{ marginRight: 2 }}>
-                                Compare Products
+                                Keyword Generator
                             </Button>
                         </Link>
                         {loggedIn && (
