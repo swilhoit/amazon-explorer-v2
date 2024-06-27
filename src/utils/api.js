@@ -100,7 +100,8 @@ export const fetchProductDetailsFromRainforest = async (asin) => {
                 api_key: rainforestApiKey,
                 type: "product",
                 asin: asin,
-                amazon_domain: "amazon.com"
+                amazon_domain: "amazon.com",
+                include: "attributes,feature_bullets"
             }
         });
         return response.data;

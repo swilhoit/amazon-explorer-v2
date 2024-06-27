@@ -1,5 +1,8 @@
+// dataProcessing.js
+
+// Process the CSV data
 export const processData = (csvData) => {
-    return csvData.map(row => {
+    const processedData = csvData.map(row => {
         const salesString = row['Sales'] && typeof row['Sales'] === 'string' ? row['Sales'] : '0';
         const sales = parseInt(salesString.replace(/,/g, ''));
 
@@ -14,22 +17,28 @@ export const processData = (csvData) => {
             reviews: parseInt(row['Review Count']) || 0,
             rating: parseFloat(row['Ratings']) || 0,
             sales: isNaN(sales) ? 0 : sales,
-            percentOfTotalSales: '', // Calculate if needed
             revenue: isNaN(revenue) ? 0 : revenue,
-            percentOfTotalRevenue: '', // Calculate if needed
             sellerType: row['Seller Country/Region'] || '', // Adjust if needed
             dateFirstAvailable: row['Creation Date'] || '',
             category: row['Category'] || '',
             imageUrl: row['Image URL'] || '',
-            amazonUrl: row['URL'] || ''
+            amazonUrl: row['URL'] || '',
+            attributes: row['Attributes'] || [],
+            featureBullets: row['Feature Bullets'] || []
         };
     });
+
+    const totalSales = processedData.reduce((sum, item) => sum + item.sales, 0);
+    const totalRevenue = processedData.reduce((sum, item) => sum + item.revenue, 0);
+
+    return processedData.map(item => ({
+        ...item,
+        percentOfTotalSales: totalSales ? ((item.sales / totalSales) * 100).toFixed(2) : '0.00',
+        percentOfTotalRevenue: totalRevenue ? ((item.revenue / totalRevenue) * 100).toFixed(2) : '0.00',
+    }));
 };
 
-
-
-
-
+// Update the summary data
 export const updateSummary = (data) => {
     const totalSales = data.reduce((sum, item) => sum + (parseFloat(item.sales) || 0), 0);
     const totalRevenue = data.reduce((sum, item) => sum + (parseFloat(item.revenue) || 0), 0);
@@ -57,6 +66,7 @@ export const updateSummary = (data) => {
     };
 };
 
+// Get price segments for the data
 export const getPriceSegments = (data, increment, summaryData) => {
     const maxPrice = Math.max(...data.map(item => parseFloat(item.price) || 0));
     const segments = [];
@@ -97,4 +107,9 @@ export const getPriceSegments = (data, increment, summaryData) => {
     }
 
     return segments;
+};
+
+// Format number with commas
+export const formatNumberWithCommas = (number) => {
+  return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 };
