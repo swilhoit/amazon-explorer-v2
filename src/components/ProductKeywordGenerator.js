@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { Box, Button, CircularProgress, TextField, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { fetchWithExponentialBackoff, generateKeywords, generateMoreKeywords } from '../utils/api'; // Ensure this path is correct based on your project structure
 
 const ProductKeywordGenerator = () => {
   const [inputValue, setInputValue] = useState('');
@@ -11,36 +12,21 @@ const ProductKeywordGenerator = () => {
   const handleGenerateKeywords = async (keyword = inputValue) => {
     setLoading(true);
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: "gpt-3.5-turbo",
-          messages: [
-            { role: "system", content: "You are a helpful assistant." },
-            { role: "user", content: `Generate at least 25 types of products related to the keyword "${keyword}":` }
-          ],
-          max_tokens: 200,  // Adjust to ensure enough tokens for 25 results
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
-            'Content-Type': 'application/json'
-          },
-        }
-      );
+      console.log('OpenAI API Key:', process.env.REACT_APP_OPENAI_API_KEY); // Log API key for debugging
+      const response = await fetchWithExponentialBackoff(generateKeywords, [keyword]);
 
       const rawKeywords = response.data.choices[0].message.content.trim();
       let generatedKeywords = rawKeywords.split(/\d+\.\s*/).filter(keyword => keyword.trim().length > 0);
 
-      // Ensure at least 25 results
       if (generatedKeywords.length < 25) {
         const additionalKeywords = Array.from({ length: 25 - generatedKeywords.length }, (_, i) => `Keyword Placeholder ${i + 1}`);
         generatedKeywords = generatedKeywords.concat(additionalKeywords);
       }
 
-      setKeywords(generatedKeywords.slice(0, 25));  // Ensure only 25 results are displayed
+      setKeywords(generatedKeywords.slice(0, 25));
     } catch (error) {
       console.error('Error generating keywords:', error);
+      console.error('Error response:', error.response?.data);
     }
     setLoading(false);
   };
@@ -48,36 +34,21 @@ const ProductKeywordGenerator = () => {
   const handleGenerateMoreKeywords = async (originalKeyword, newKeyword) => {
     setLoadingMore(true);
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: "gpt-3.5-turbo",
-          messages: [
-            { role: "system", content: "You are a helpful assistant." },
-            { role: "user", content: `Generate at least 25 types of products related to the keywords "${originalKeyword}" and "${newKeyword}":` }
-          ],
-          max_tokens: 200,  // Adjust to ensure enough tokens for 25 results
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
-            'Content-Type': 'application/json'
-          },
-        }
-      );
+      console.log('OpenAI API Key:', process.env.REACT_APP_OPENAI_API_KEY); // Log API key for debugging
+      const response = await fetchWithExponentialBackoff(generateMoreKeywords, [originalKeyword, newKeyword]);
 
       const rawKeywords = response.data.choices[0].message.content.trim();
       let generatedKeywords = rawKeywords.split(/\d+\.\s*/).filter(keyword => keyword.trim().length > 0);
 
-      // Ensure at least 25 results
       if (generatedKeywords.length < 25) {
         const additionalKeywords = Array.from({ length: 25 - generatedKeywords.length }, (_, i) => `Keyword Placeholder ${i + 1}`);
         generatedKeywords = generatedKeywords.concat(additionalKeywords);
       }
 
-      setKeywords(generatedKeywords.slice(0, 25));  // Ensure only 25 results are displayed
+      setKeywords(generatedKeywords.slice(0, 25));
     } catch (error) {
       console.error('Error generating keywords:', error);
+      console.error('Error response:', error.response?.data);
     }
     setLoadingMore(false);
   };

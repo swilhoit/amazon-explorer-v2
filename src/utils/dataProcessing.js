@@ -1,13 +1,40 @@
-// dataProcessing.js
-
-// Process the CSV data
 export const processData = (csvData) => {
-    const processedData = csvData.map(row => {
-        const salesString = row['Sales'] && typeof row['Sales'] === 'string' ? row['Sales'] : '0';
-        const sales = parseInt(salesString.replace(/,/g, ''));
+    console.log('ProcessData - Input:', csvData);
 
-        const revenueString = row['Revenue'] && typeof row['Revenue'] === 'string' ? row['Revenue'] : '0';
-        const revenue = parseFloat(revenueString.replace(/,/g, ''));
+    if (!Array.isArray(csvData) || csvData.length === 0) {
+        console.error('ProcessData - Invalid input: csvData is not an array or is empty');
+        return [];
+    }
+
+    const processedData = csvData.map((row, index) => {
+        if (typeof row !== 'object' || row === null) {
+            console.error(`ProcessData - Invalid row at index ${index}:`, row);
+            return null;
+        }
+
+        // Ensure sales is always a number
+        let sales = 0;
+        if (row['Sales'] && typeof row['Sales'] === 'string') {
+            sales = parseInt(row['Sales'].replace(/,/g, ''), 10);
+        } else if (typeof row['Sales'] === 'number') {
+            sales = row['Sales'];
+        }
+
+        // Ensure revenue is always a number and rounded to the nearest whole number
+        let revenue = 0;
+        if (row['Revenue'] && typeof row['Revenue'] === 'string') {
+            revenue = Math.round(parseFloat(row['Revenue'].replace(/[,$]/g, '')));
+        } else if (typeof row['Revenue'] === 'number') {
+            revenue = Math.round(row['Revenue']);
+        }
+
+        // If we have revenue but no sales, estimate sales
+        if (revenue > 0 && sales === 0) {
+            const price = parseFloat(row['Price  $']) || 0;
+            if (price > 0) {
+                sales = Math.round(revenue / price);
+            }
+        }
 
         return {
             asin: row['ASIN'] || '',
@@ -18,7 +45,8 @@ export const processData = (csvData) => {
             rating: parseFloat(row['Ratings']) || 0,
             sales: isNaN(sales) ? 0 : sales,
             revenue: isNaN(revenue) ? 0 : revenue,
-            sellerType: row['Seller Country/Region'] || '', // Adjust if needed
+            sellerCountry: row['Seller Country/Region'] || '',
+            fulfillment: row['Fulfillment'] || '',
             dateFirstAvailable: row['Creation Date'] || '',
             category: row['Category'] || '',
             imageUrl: row['Image URL'] || '',
@@ -26,20 +54,34 @@ export const processData = (csvData) => {
             attributes: row['Attributes'] || [],
             featureBullets: row['Feature Bullets'] || []
         };
-    });
+    }).filter(item => item !== null);
+
+    if (processedData.length === 0) {
+        console.error('ProcessData - All rows were invalid');
+        return [];
+    }
 
     const totalSales = processedData.reduce((sum, item) => sum + item.sales, 0);
     const totalRevenue = processedData.reduce((sum, item) => sum + item.revenue, 0);
 
-    return processedData.map(item => ({
+    const finalData = processedData.map(item => ({
         ...item,
         percentOfTotalSales: totalSales ? ((item.sales / totalSales) * 100).toFixed(2) : '0.00',
         percentOfTotalRevenue: totalRevenue ? ((item.revenue / totalRevenue) * 100).toFixed(2) : '0.00',
     }));
+
+    console.log('ProcessData - Output:', finalData);
+    return finalData;
 };
 
-// Update the summary data
 export const updateSummary = (data) => {
+    console.log('UpdateSummary - Input:', data);
+
+    if (!Array.isArray(data) || data.length === 0) {
+        console.error('UpdateSummary - Invalid input: data is not an array or is empty');
+        return null;
+    }
+
     const totalSales = data.reduce((sum, item) => sum + (parseFloat(item.sales) || 0), 0);
     const totalRevenue = data.reduce((sum, item) => sum + (parseFloat(item.revenue) || 0), 0);
     const totalPrice = data.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0);
@@ -48,36 +90,41 @@ export const updateSummary = (data) => {
     const averagePrice = data.length > 0 ? (totalPrice / data.length).toFixed(2) : '0.00';
     const averageReviews = data.length > 0 ? Math.round(totalReviews / data.length) : 0;
 
-    return {
+    const summary = {
         asin: "Summary",
         title: "",
         brand: "",
         price: `$${averagePrice}`,
         reviews: averageReviews.toString(),
         rating: "",
+        sales: Math.round(totalSales),
+        percentOfTotalSales: "100.00",
+        revenue: Math.round(totalRevenue),
+        percentOfTotalRevenue: "100.00",
         category: "",
-        sales: totalSales.toLocaleString(),
-        percentOfTotalSales: "100%",
-        revenue: `$${totalRevenue.toFixed(2)}`,
-        percentOfTotalRevenue: "100%",
         imageUrl: "",
-        sellerType: "",
+        sellerCountry: "",
+        fulfillment: "",
         dateFirstAvailable: "",
     };
+
+    console.log('UpdateSummary - Output:', summary);
+    return summary;
 };
 
-// Get price segments for the data
 export const getPriceSegments = (data, increment, summaryData) => {
+    console.log('GetPriceSegments - Input:', { data, increment, summaryData });
+
+    if (!Array.isArray(data) || data.length === 0) {
+        console.error('GetPriceSegments - Invalid input: data is not an array or is empty');
+        return [];
+    }
+
     const maxPrice = Math.max(...data.map(item => parseFloat(item.price) || 0));
     const segments = [];
 
-    const totalSalesValue = typeof summaryData?.sales === 'string' 
-        ? parseFloat(summaryData.sales.replace(/,/g, '')) 
-        : (typeof summaryData?.sales === 'number' ? summaryData.sales : 0);
-
-    const totalRevenueValue = typeof summaryData?.revenue === 'string' 
-        ? parseFloat(summaryData.revenue.replace(/[,$]/g, ''))
-        : (typeof summaryData?.revenue === 'number' ? summaryData.revenue : 0);
+    const totalSalesValue = summaryData?.sales || 0;
+    const totalRevenueValue = summaryData?.revenue || 0;
 
     for (let i = 0; i <= maxPrice; i += increment) {
         const segmentItems = data.filter(item => {
@@ -85,7 +132,6 @@ export const getPriceSegments = (data, increment, summaryData) => {
             return price > i && price <= i + increment;
         });
 
-        // Skip segments with 0 products
         if (segmentItems.length === 0) continue;
 
         const totalSales = segmentItems.reduce((sum, item) => sum + (parseFloat(item.sales) || 0), 0);
@@ -98,18 +144,21 @@ export const getPriceSegments = (data, increment, summaryData) => {
             items: segmentItems,
             price: `$${avgPrice}`,
             reviews: segmentItems.reduce((sum, item) => sum + (parseInt(item.reviews) || 0), 0),
-            sales: totalSales.toLocaleString(),
-            revenue: `$${totalRevenue.toFixed(2)}`,
+            sales: Math.round(totalSales),
+            revenue: Math.round(totalRevenue),
             percentOfTotalSales: totalSalesValue ? ((totalSales / totalSalesValue) * 100).toFixed(2) + '%' : '0%',
             percentOfTotalRevenue: totalRevenueValue ? ((totalRevenue / totalRevenueValue) * 100).toFixed(2) + '%' : '0%',
-            productCount: segmentItems.length // Add product count
+            productCount: segmentItems.length
         });
     }
 
+    console.log('GetPriceSegments - Output:', segments);
     return segments;
 };
 
-// Format number with commas
 export const formatNumberWithCommas = (number) => {
-  return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    if (typeof number === 'number') {
+        return Math.round(number).toLocaleString('en-US');
+    }
+    return number;
 };

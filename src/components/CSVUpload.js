@@ -8,15 +8,15 @@ const CSVUpload = ({ onDataUpload, setLoading }) => {
 
     const handleOnDrop = (results) => {
         setLoading(true);
-        console.log('CSV data:', results.data); // Log raw CSV data
+        console.log('CSV Upload - Raw data:', results.data);
 
         const processedData = processData(results.data);
-        console.log('Processed data:', processedData); // Log processed data
+        console.log('CSV Upload - Processed data:', processedData);
 
         if (processedData.length > 0) {
             onDataUpload(processedData);
         } else {
-            console.log('No data processed from CSV');
+            console.log('CSV Upload - No data processed from CSV');
             onDataUpload([]);
         }
 
@@ -43,11 +43,8 @@ const CSVUpload = ({ onDataUpload, setLoading }) => {
                     <Button variant="contained" {...getRootProps()}>
                         Upload CSV
                     </Button>
-                    <div>
-                        {acceptedFile && acceptedFile.name}
-                        <Button {...getRemoveFileProps()}>Remove</Button>
-                    </div>
-                    <ProgressBar />
+               
+                    
                 </>
             )}
         </CSVReader>

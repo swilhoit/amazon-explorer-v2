@@ -1,20 +1,69 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Grid, Card, CardContent, Typography, CardMedia, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Box, Button } from '@mui/material';
+import { Container, Grid, Card, CardContent, Typography, CardMedia, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Box, Button, CircularProgress } from '@mui/material';
 import Lightbox from 'react-image-lightbox';
 import 'react-image-lightbox/style.css';
 import { Parser } from 'json2csv';
+import { fetchFeatureSummaryWithBackoff, fetchCombinedFeatureSummaryWithBackoff } from '../utils/api';
 
 const ProductComparison = ({ products = [] }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImages, setLightboxImages] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [featureSummaries, setFeatureSummaries] = useState([]);
+  const [combinedFeatureSummary, setCombinedFeatureSummary] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     console.log('Products received:', products);
     products.forEach((product, index) => {
       console.log(`Product ${index + 1}:`, JSON.stringify(product, null, 2));
     });
+    setLoading(true);
+    generateFeatureSummaries(products);
+    generateCombinedFeatureSummary(products);
   }, [products]);
+
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  const generateFeatureSummaries = async (products) => {
+    try {
+      const summaries = [];
+      for (const product of products) {
+        const featureBullets = product.product?.feature_bullets || product.feature_bullets || [];
+        const attributes = product.product?.attributes || product.attributes || [];
+        console.log('Feature bullets:', featureBullets); // Log the feature bullets
+        console.log('Attributes:', attributes); // Log the attributes
+        if (featureBullets.length > 0 || attributes.length > 0) {
+          const summary = await fetchFeatureSummaryWithBackoff(featureBullets, attributes);
+          console.log('Feature summary:', summary); // Log the feature summary
+          summaries.push(summary);
+          await delay(3000); // Delay between each request
+        } else {
+          summaries.push([]);
+        }
+      }
+      setFeatureSummaries(summaries);
+    } catch (error) {
+      console.error('Error generating feature summaries:', error);
+    }
+  };
+
+  const generateCombinedFeatureSummary = async (products) => {
+    try {
+      const allFeatures = products.map(product => {
+        const featureBullets = product.product?.feature_bullets || product.feature_bullets || [];
+        const attributes = product.product?.attributes || product.attributes || [];
+        return `Product ${product.product?.title || product.title || 'Unnamed Product'}:\nFeatures:\n${featureBullets.join('\n')}\nAttributes:\n${attributes.map(attr => `${attr.name}: ${attr.value}`).join('\n')}`;
+      });
+      const summary = await fetchCombinedFeatureSummaryWithBackoff(allFeatures);
+      console.log('Combined feature summary:', summary); // Log the combined feature summary
+      setCombinedFeatureSummary(Array.isArray(summary) ? summary : []);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error generating combined feature summary:', error);
+      setLoading(false);
+    }
+  };
 
   const handleThumbnailClick = (images, index) => {
     setLightboxImages(images);
@@ -67,9 +116,31 @@ const ProductComparison = ({ products = [] }) => {
   const renderFeatureBullets = (featureBullets) => (
     <ul>
       {featureBullets && featureBullets.map((bullet, index) => (
-        <li key={index}>{bullet}</li>
+        <li key={index} style={{ marginBottom: '10px' }}>{bullet}</li>
       ))}
     </ul>
+  );
+
+  const renderFeatureSummary = (summary) => (
+    <Box sx={{ backgroundColor: 'lightgreen', padding: 2, marginTop: 2, borderRadius: 1 }}>
+      <Typography variant="h6" sx={{ marginBottom: 1 }}>Features Summary</Typography>
+      <ul>
+        {Array.isArray(summary) && summary.map((point, index) => (
+          <li key={index} style={{ marginBottom: '10px' }}>{point}</li>
+        ))}
+      </ul>
+    </Box>
+  );
+
+  const renderCombinedFeatureSummary = (summary) => (
+    <Box sx={{ backgroundColor: 'lightblue', padding: 2, marginBottom: 2, borderRadius: 1 }}>
+      <Typography variant="h6" sx={{ marginBottom: 1 }}>Combined Features Summary</Typography>
+      <ul>
+        {Array.isArray(summary) && summary.map((point, index) => (
+          <li key={index} style={{ marginBottom: '10px' }}>{point}</li>
+        ))}
+      </ul>
+    </Box>
   );
 
   const renderImageThumbnails = (images) => {
@@ -83,14 +154,16 @@ const ProductComparison = ({ products = [] }) => {
             <Grid item xs={3} key={index}>
               <CardMedia
                 component="img"
-                image={imageUrl}
+                src={imageUrl}
                 alt={`Thumbnail ${index + 1}`}
                 sx={{ 
                   width: '100%', 
-                  height: 0,
-                  paddingTop: '100%', // This makes the image a square
+                  height: 'auto', // Ensure the image maintains its aspect ratio
                   cursor: 'pointer',
-                  objectFit: 'cover'
+                  objectFit: 'cover',
+                  border: '1px solid #ccc', // Add a border for visibility
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)', // Add a subtle shadow
+                  display: 'block', // Ensure the image is a block element
                 }}
                 onClick={() => handleThumbnailClick(images.map(img => typeof img === 'string' ? img : img.link || img.url || ''), index)}
               />
@@ -132,6 +205,55 @@ const ProductComparison = ({ products = [] }) => {
     }
   };
 
+  const renderProductCard = (productData, index) => {
+    const product = productData.product || productData; // Handle both structures
+    console.log(`Rendering product ${index + 1}:`, JSON.stringify(product, null, 2));
+    
+    // Log specific data points we're interested in
+    console.log('Main Image:', product.main_image);
+    console.log('Images:', product.images);
+    console.log('Price:', product.price);
+    console.log('Sales:', product.sales);
+    console.log('Revenue:', product.revenue);
+
+    const mainImage = product.main_image?.link || product.main_image || product.images?.[0]?.link || product.images?.[0] || '';
+    const thumbnailImages = product.images || [];
+    const price = product.price?.value || product.price || 'N/A';
+    const sales = product.sales || 'N/A';
+    const revenue = product.revenue || 'N/A';
+
+    return (
+      <Card key={index} sx={{ minWidth: 300, maxWidth: 300, margin: 1, display: 'inline-block', flex: '0 0 auto' }}>
+        {mainImage && (
+          <CardMedia
+            component="img"
+            height="300"
+            image={mainImage}
+            alt={product.title || 'Product Image'}
+            onClick={() => handleThumbnailClick([mainImage, ...thumbnailImages.map(img => typeof img === 'string' ? img : img.link || img.url || '')], 0)}
+            style={{ cursor: 'pointer' }}
+          />
+        )}
+        <CardContent sx={{ width: '100%' }}>
+          <Typography variant="h6" component="div" sx={{ minHeight: 60, maxHeight: 60, overflow: 'hidden', marginBottom: 1 }}>
+            {product.title || 'No Title'}
+          </Typography>
+          <Typography variant="body1"><strong>Price:</strong> ${typeof price === 'number' ? price.toFixed(2) : price}</Typography>
+          <Typography variant="body1"><strong>Sales:</strong> {typeof sales === 'number' ? sales.toLocaleString() : sales}</Typography>
+          <Typography variant="body1"><strong>Revenue:</strong> ${typeof revenue === 'number' ? revenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : revenue}</Typography>
+          {renderFeatureSummary(featureSummaries[index])}
+          {renderImageThumbnails(thumbnailImages)}
+          <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Specifications</Typography>
+          {renderSpecifications(product.specifications)}
+          <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Attributes</Typography>
+          {renderAttributes(product.attributes)}
+          <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Feature Bullets</Typography>
+          {renderFeatureBullets(product.feature_bullets)}
+        </CardContent>
+      </Card>
+    );
+  };
+
   if (!products || products.length === 0) {
     return (
       <Container maxWidth="xl">
@@ -145,54 +267,9 @@ const ProductComparison = ({ products = [] }) => {
       <Button variant="contained" color="primary" onClick={exportToCSV} sx={{ marginBottom: 2 }}>
         Export to CSV
       </Button>
+      {loading ? <CircularProgress /> : renderCombinedFeatureSummary(combinedFeatureSummary)}
       <Box sx={{ display: 'flex', overflowX: 'auto', flexWrap: 'nowrap', marginTop: 2 }}>
-        {products.map((productData, index) => {
-          const product = productData.product || productData; // Handle both structures
-          console.log(`Rendering product ${index + 1}:`, JSON.stringify(product, null, 2));
-          
-          // Log specific data points we're interested in
-          console.log('Main Image:', product.main_image);
-          console.log('Images:', product.images);
-          console.log('Price:', product.price);
-          console.log('Sales:', product.sales);
-          console.log('Revenue:', product.revenue);
-
-          const mainImage = product.main_image?.link || product.main_image || product.images?.[0]?.link || product.images?.[0] || '';
-          const thumbnailImages = product.images || [];
-          const price = product.price?.value || product.price || 'N/A';
-          const sales = product.sales || 'N/A';
-          const revenue = product.revenue || 'N/A';
-
-          return (
-            <Card key={index} sx={{ minWidth: 300, maxWidth: 300, margin: 1, display: 'inline-block', flex: '0 0 auto' }}>
-              {mainImage && (
-                <CardMedia
-                  component="img"
-                  height="300"
-                  image={mainImage}
-                  alt={product.title || 'Product Image'}
-                  onClick={() => handleThumbnailClick([mainImage, ...thumbnailImages.map(img => typeof img === 'string' ? img : img.link || img.url || '')], 0)}
-                  style={{ cursor: 'pointer' }}
-                />
-              )}
-              <CardContent sx={{ width: '100%' }}>
-                <Typography variant="h6" component="div" sx={{ minHeight: 60, maxHeight: 60, overflow: 'hidden', marginBottom: 1 }}>
-                  {product.title || 'No Title'}
-                </Typography>
-                <Typography variant="body1"><strong>Price:</strong> ${typeof price === 'number' ? price.toFixed(2) : price}</Typography>
-                <Typography variant="body1"><strong>Sales:</strong> {sales}</Typography>
-                <Typography variant="body1"><strong>Revenue:</strong> ${typeof revenue === 'number' ? revenue.toFixed(2) : revenue}</Typography>
-                {renderImageThumbnails(thumbnailImages)}
-                <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Specifications</Typography>
-                {renderSpecifications(product.specifications)}
-                <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Attributes</Typography>
-                {renderAttributes(product.attributes)}
-                <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Feature Bullets</Typography>
-                {renderFeatureBullets(product.feature_bullets)}
-              </CardContent>
-            </Card>
-          );
-        })}
+        {products.map((product, index) => renderProductCard(product, index))}
       </Box>
       {lightboxOpen && (
         <Lightbox

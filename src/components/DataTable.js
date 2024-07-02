@@ -1,114 +1,257 @@
-import React from 'react';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Checkbox, IconButton, TableSortLabel } from '@mui/material';
-import { Delete } from '@mui/icons-material';
+import React, { useMemo } from 'react';
+import {
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Checkbox, TableSortLabel, Typography, Button, IconButton, Link
+} from '@mui/material';
+import { styled } from '@mui/material/styles';
 import { formatNumberWithCommas } from '../utils/dataProcessing';
+import { Delete } from '@mui/icons-material';
+
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+    padding: '8px',
+    '&.title-cell': {
+        width: '200px',
+        maxWidth: '200px',
+    },
+}));
+
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+    '&:nth-of-type(odd)': {
+        backgroundColor: theme.palette.action.hover,
+    },
+    '&:hover': {
+        backgroundColor: theme.palette.action.selected,
+    },
+    '& > td': {
+        height: '60px',
+        maxHeight: '60px',
+        overflow: 'hidden',
+    },
+}));
+
+const TwoLineEllipsis = styled('div')({
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    lineHeight: '1.2em',
+    maxHeight: '2.4em', // 2 lines * 1.2em line-height
+    wordBreak: 'break-word',
+});
 
 const DataTable = ({
-  data,
-  handleDeleteRow,
-  handleCheckboxChange,
-  selectedForComparison,
-  handleRequestSort,
-  order,
-  orderBy
+    data,
+    summaryData,
+    handleCheckboxChange,
+    selectedForComparison,
+    handleRequestSort,
+    order,
+    orderBy,
+    handleCompare,
+    handleDeleteRow
 }) => {
-  if (!data || data.length === 0) {
-    return <div>No data available</div>;
-  }
+    const sortedData = useMemo(() => {
+        if (!data || !Array.isArray(data) || data.length === 0) {
+            return [];
+        }
 
-  return (
-    <TableContainer component={Paper}>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Select</TableCell>
-            <TableCell>Image</TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={orderBy === 'title'}
-                direction={orderBy === 'title' ? order : 'asc'}
-                onClick={() => handleRequestSort('title')}
-              >
-                Title
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={orderBy === 'price'}
-                direction={orderBy === 'price' ? order : 'asc'}
-                onClick={() => handleRequestSort('price')}
-              >
-                Price
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={orderBy === 'sales'}
-                direction={orderBy === 'sales' ? order : 'asc'}
-                onClick={() => handleRequestSort('sales')}
-              >
-                Sales
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={orderBy === 'percentOfTotalSales'}
-                direction={orderBy === 'percentOfTotalSales' ? order : 'asc'}
-                onClick={() => handleRequestSort('percentOfTotalSales')}
-              >
-                % of Total Sales
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={orderBy === 'revenue'}
-                direction={orderBy === 'revenue' ? order : 'asc'}
-                onClick={() => handleRequestSort('revenue')}
-              >
-                Revenue
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={orderBy === 'percentOfTotalRevenue'}
-                direction={orderBy === 'percentOfTotalRevenue' ? order : 'asc'}
-                onClick={() => handleRequestSort('percentOfTotalRevenue')}
-              >
-                % of Total Revenue
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {data.map((product, index) => (
-            <TableRow key={index}>
-              <TableCell>
-                <Checkbox
-                  checked={selectedForComparison.includes(product.asin)}
-                  onChange={() => handleCheckboxChange(product.asin)}
-                />
-              </TableCell>
-              <TableCell>
-                <img src={product.imageUrl} alt={product.title} style={{ width: 50, height: 50 }} />
-              </TableCell>
-              <TableCell>{product.title}</TableCell>
-              <TableCell>{product.price ? `$${formatNumberWithCommas(product.price)}` : 'N/A'}</TableCell>
-              <TableCell>{product.sales ? formatNumberWithCommas(product.sales) : 'N/A'}</TableCell>
-              <TableCell>{product.percentOfTotalSales ? `${product.percentOfTotalSales}%` : 'N/A'}</TableCell>
-              <TableCell>{product.revenue ? `$${formatNumberWithCommas(product.revenue)}` : 'N/A'}</TableCell>
-              <TableCell>{product.percentOfTotalRevenue ? `${product.percentOfTotalRevenue}%` : 'N/A'}</TableCell>
-              <TableCell>
-                <IconButton onClick={() => handleDeleteRow(product.asin)}>
-                  <Delete />
-                </IconButton>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
+        const comparator = (a, b) => {
+            if (!a || !b) return 0;
+            
+            let aValue = a[orderBy];
+            let bValue = b[orderBy];
+
+            // Convert to numbers for numeric fields
+            if (['price', 'reviews', 'sales', 'revenue', 'percentOfTotalSales', 'percentOfTotalRevenue'].includes(orderBy)) {
+                aValue = parseFloat(aValue) || 0;
+                bValue = parseFloat(bValue) || 0;
+            }
+
+            // Handle string comparisons
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                return order === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+            }
+
+            // Handle number comparisons
+            if (aValue < bValue) return order === 'asc' ? -1 : 1;
+            if (aValue > bValue) return order === 'asc' ? 1 : -1;
+            return 0;
+        };
+
+        return [...data].sort(comparator);
+    }, [data, order, orderBy]);
+
+    const createSortHandler = (property) => () => {
+        handleRequestSort(property);
+    };
+
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        return <Typography>No data available</Typography>;
+    }
+
+    return (
+        <TableContainer component={Paper}>
+            <Table>
+                <TableHead>
+                    <TableRow>
+                        <StyledTableCell>Select</StyledTableCell>
+                        <StyledTableCell>Image</StyledTableCell>
+                        <StyledTableCell className="title-cell">
+                            <TableSortLabel
+                                active={orderBy === 'title'}
+                                direction={orderBy === 'title' ? order : 'asc'}
+                                onClick={createSortHandler('title')}
+                            >
+                                Title
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                            <TableSortLabel
+                                active={orderBy === 'price'}
+                                direction={orderBy === 'price' ? order : 'asc'}
+                                onClick={createSortHandler('price')}
+                            >
+                                Price
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                            <TableSortLabel
+                                active={orderBy === 'reviews'}
+                                direction={orderBy === 'reviews' ? order : 'asc'}
+                                onClick={createSortHandler('reviews')}
+                            >
+                                Reviews
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                            <TableSortLabel
+                                active={orderBy === 'sales'}
+                                direction={orderBy === 'sales' ? order : 'asc'}
+                                onClick={createSortHandler('sales')}
+                            >
+                                Sales
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                            <TableSortLabel
+                                active={orderBy === 'percentOfTotalSales'}
+                                direction={orderBy === 'percentOfTotalSales' ? order : 'asc'}
+                                onClick={createSortHandler('percentOfTotalSales')}
+                            >
+                                % of Total Sales
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                            <TableSortLabel
+                                active={orderBy === 'revenue'}
+                                direction={orderBy === 'revenue' ? order : 'asc'}
+                                onClick={createSortHandler('revenue')}
+                            >
+                                Revenue
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                            <TableSortLabel
+                                active={orderBy === 'percentOfTotalRevenue'}
+                                direction={orderBy === 'percentOfTotalRevenue' ? order : 'asc'}
+                                onClick={createSortHandler('percentOfTotalRevenue')}
+                            >
+                                % of Total Revenue
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                            <TableSortLabel
+                                active={orderBy === 'brand'}
+                                direction={orderBy === 'brand' ? order : 'asc'}
+                                onClick={createSortHandler('brand')}
+                            >
+                                Brand
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                            <TableSortLabel
+                                active={orderBy === 'asin'}
+                                direction={orderBy === 'asin' ? order : 'asc'}
+                                onClick={createSortHandler('asin')}
+                            >
+                                ASIN
+                            </TableSortLabel>
+                        </StyledTableCell>
+                        <StyledTableCell>Actions</StyledTableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {summaryData && (
+                        <StyledTableRow>
+                            <StyledTableCell>
+                                <Button 
+                                    variant="contained" 
+                                    color="secondary" 
+                                    onClick={handleCompare} 
+                                    disabled={selectedForComparison.length === 0}
+                                    size="small"
+                                >
+                                    Compare
+                                </Button>
+                            </StyledTableCell>
+                            <StyledTableCell>-</StyledTableCell>
+                            <StyledTableCell>-</StyledTableCell>
+                            <StyledTableCell>{summaryData.price || 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{formatNumberWithCommas(summaryData.reviews) || 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{formatNumberWithCommas(summaryData.sales) || 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{summaryData.percentOfTotalSales ? `${summaryData.percentOfTotalSales}%` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{summaryData.revenue ? `$${formatNumberWithCommas(summaryData.revenue)}` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{summaryData.percentOfTotalRevenue ? `${summaryData.percentOfTotalRevenue}%` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>-</StyledTableCell>
+                            <StyledTableCell>Summary</StyledTableCell>
+                            <StyledTableCell>-</StyledTableCell>
+                        </StyledTableRow>
+                    )}
+                    {sortedData.map((product, index) => (
+                        <StyledTableRow key={product.asin || index}>
+                            <StyledTableCell>
+                                <Checkbox
+                                    checked={selectedForComparison.includes(product.asin)}
+                                    onChange={() => handleCheckboxChange(product.asin)}
+                                />
+                            </StyledTableCell>
+                            <StyledTableCell>
+                                {product.imageUrl && (
+                                    <Link href={product.amazonUrl} target="_blank" rel="noopener noreferrer">
+                                        <img src={product.imageUrl} alt={product.title} style={{ width: 50, height: 50 }} />
+                                    </Link>
+                                )}
+                            </StyledTableCell>
+                            <StyledTableCell className="title-cell">
+                                <Link href={product.amazonUrl} target="_blank" rel="noopener noreferrer">
+                                    <TwoLineEllipsis title={product.title || 'N/A'}>
+                                        {product.title || 'N/A'}
+                                    </TwoLineEllipsis>
+                                </Link>
+                            </StyledTableCell>
+                            <StyledTableCell>{product.price ? `$${formatNumberWithCommas(product.price)}` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{formatNumberWithCommas(product.reviews) || 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{formatNumberWithCommas(product.sales) || 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{product.percentOfTotalSales ? `${product.percentOfTotalSales}%` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{product.revenue ? `$${formatNumberWithCommas(product.revenue)}` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{product.percentOfTotalRevenue ? `${product.percentOfTotalRevenue}%` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{product.brand || 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{product.asin || 'N/A'}</StyledTableCell>
+                            <StyledTableCell>
+                                <IconButton 
+                                    size="small" 
+                                    onClick={() => handleDeleteRow(product.asin)}
+                                    aria-label={`Delete ${product.title}`}
+                                >
+                                    <Delete />
+                                </IconButton>
+                            </StyledTableCell>
+                        </StyledTableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </TableContainer>
+    );
 };
 
 export default DataTable;

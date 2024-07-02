@@ -7,13 +7,11 @@ import {
 import { styled } from '@mui/material/styles';
 import { ExpandMore, ExpandLess, Delete } from '@mui/icons-material';
 import DataTable from './DataTable';
-import ScatterPlot from './ScatterPlot';
-import PieCharts from './PieCharts';
-import TimelineChart from './TimelineChart';
+import { ScatterPlot, PieCharts, TimelineChart } from './Charts';
 import ProductComparison from './ProductComparison';
 import CSVUpload from './CSVUpload';
 import { fetchTopKeywords, fetchDataForKeywords, fetchProductDetailsFromRainforest } from '../utils/api';
-import { updateSummary, getPriceSegments, processData } from '../utils/dataProcessing';
+import { updateSummary, getPriceSegments, processData, formatNumberWithCommas } from '../utils/dataProcessing';
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
     backgroundColor: theme.palette.common.black,
@@ -43,10 +41,6 @@ const marks = [
     { value: 50, label: '$50' },
 ];
 
-const formatNumberWithCommas = (number) => {
-    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-};
-
 const MainComponent = () => {
     const [keywords, setKeywords] = useState('');
     const [data, setData] = useState([]);
@@ -63,17 +57,11 @@ const MainComponent = () => {
     const [comparisonProducts, setComparisonProducts] = useState([]);
     const [selectedForComparison, setSelectedForComparison] = useState([]);
     const [errorMessage, setErrorMessage] = useState('');
-
-    const initialCache = JSON.parse(localStorage.getItem('keywordCache')) || {};
-    const [cache, setCache] = useState(initialCache);
-
     const [order, setOrder] = useState('asc');
     const [orderBy, setOrderBy] = useState('');
 
-    useEffect(() => {
-        console.log("MainComponent: Data state updated", data?.length, "items");
-        console.log("MainComponent: First few items:", data?.slice(0, 3));
-    }, [data]);
+    const initialCache = JSON.parse(localStorage.getItem('keywordCache')) || {};
+    const [cache, setCache] = useState(initialCache);
 
     useEffect(() => {
         localStorage.setItem('keywordCache', JSON.stringify(cache));
@@ -200,23 +188,40 @@ const MainComponent = () => {
 
     const fetchWinningProducts = useCallback(() => {
         const priceSegments = getPriceSegments(data, priceSegmentIncrement, summaryData);
-        const winningProducts = priceSegments.map(segment => segment.items[0]).filter(Boolean);
-        setWinningProducts(winningProducts);
+        const winners = priceSegments.map(segment => {
+            const sortedItems = segment.items.sort((a, b) => b.sales - a.sales);
+            return sortedItems[0]; // Return the item with the highest sales
+        }).filter(Boolean);
+        setWinningProducts(winners);
     }, [data, priceSegmentIncrement, summaryData]);
 
     const fetchComparisonProducts = useCallback(async () => {
+        setLoading(true);
         const productsForComparison = [];
         for (const asin of selectedForComparison) {
             try {
                 const productDetails = await fetchProductDetailsFromRainforest(asin);
-                productsForComparison.push(productDetails);
+                // Find the corresponding product in the main data table
+                const mainTableProduct = data.find(item => item.asin === asin);
+                if (mainTableProduct) {
+                    // Merge the data from the main table with the Rainforest data
+                    productsForComparison.push({
+                        ...productDetails,
+                        sales: mainTableProduct.sales,
+                        revenue: mainTableProduct.revenue,
+                        price: mainTableProduct.price
+                    });
+                } else {
+                    productsForComparison.push(productDetails);
+                }
             } catch (error) {
                 console.error(`Error fetching details for ASIN: ${asin}`, error);
                 setErrorMessage(`Failed to fetch details for ASIN: ${asin}`);
             }
         }
         setComparisonProducts(productsForComparison);
-    }, [selectedForComparison]);
+        setLoading(false);
+    }, [selectedForComparison, data]);
 
     const handleCompare = useCallback(() => {
         fetchComparisonProducts();
@@ -237,42 +242,36 @@ const MainComponent = () => {
         const isAsc = orderBy === property && order === 'asc';
         setOrder(isAsc ? 'desc' : 'asc');
         setOrderBy(property);
-
-        setData(prevData => {
-            const sortedData = [...prevData].sort((a, b) => {
-                if (a[property] < b[property]) {
-                    return isAsc ? -1 : 1;
-                }
-                if (a[property] > b[property]) {
-                    return isAsc ? 1 : -1;
-                }
-                return 0;
-            });
-            return sortedData;
-        });
     }, [order, orderBy]);
 
     const handleCSVUpload = useCallback((uploadedData) => {
         console.log("MainComponent: CSV Upload - Received data", uploadedData.length, "items");
-        console.log("MainComponent: CSV Upload - First few items:", uploadedData.slice(0, 3));
-    
+        
+        const summary = updateSummary(uploadedData);
+        console.log("MainComponent: CSV Upload - Summary", summary);
+
+        setSummaryData(summary);
         setData(uploadedData);
-        setSummaryData(null); // Assuming no summary data from CSV
         setResultsCount(uploadedData.length);
         setQueriedKeywords([]);
         setSelectedKeywords({});
         setKeywordResults({});
         
-        // Force a re-render of the DataTable
-        setActiveTab(prevTab => (prevTab === 0 ? 1 : 0));
-        
         console.log("MainComponent: CSV Upload - State updates complete");
+        console.log("MainComponent: CSV Upload - Data state", uploadedData);
+        console.log("MainComponent: CSV Upload - Summary state", summary);
     }, []);
 
     const memoizedPriceSegments = useMemo(() => 
         getPriceSegments(data, priceSegmentIncrement, summaryData),
         [data, priceSegmentIncrement, summaryData]
     );
+
+    useEffect(() => {
+        if (activeTab === 2) {
+            fetchWinningProducts();
+        }
+    }, [activeTab, fetchWinningProducts]);
 
     return (
         <Container>
@@ -299,60 +298,11 @@ const MainComponent = () => {
                     setLoading={setLoading}
                 />
             </Box>
-            <Button 
-                variant="contained" 
-                color="secondary" 
-                onClick={handleCompare} 
-                disabled={loading || selectedForComparison.length === 0}
-                aria-label="Compare Selected Products"
-            >
-                Compare
-            </Button>
             {errorMessage && (
                 <Typography color="error" gutterBottom>
                     {errorMessage}
                 </Typography>
             )}
-            <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                    {queriedKeywords.length > 0 && (
-                        <Box mb={2}>
-                            <Typography variant="h6" component="h2" gutterBottom>
-                                Queried Keywords
-                            </Typography>
-                            <TableContainer component={Paper}>
-                                <Table size="small" aria-label="queried keywords table">
-                                    <TableHead>
-                                        <TableRow>
-                                            <StyledTableCell>Keyword</StyledTableCell>
-                                            <StyledTableCell>Results</StyledTableCell>
-                                            <StyledTableCell>Select</StyledTableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {queriedKeywords.map((keyword, index) => (
-                                            <StyledTableRow key={index}>
-                                                <TableCell>{keyword}</TableCell>
-                                                <TableCell>{(keywordResults[keyword] || []).length || 0}</TableCell>
-                                                <TableCell>
-                                                    <Checkbox
-                                                        checked={selectedKeywords[keyword] ?? true}
-                                                        onChange={() => handleToggleKeyword(keyword)}
-                                                        aria-label={`Select ${keyword}`}
-                                                    />
-                                                </TableCell>
-                                            </StyledTableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                        </Box>
-                    )}
-                </Grid>
-                <Grid item xs={12} md={6}>
-                    <ScatterPlot data={data.filter(item => item.asin !== "Summary")} />
-                </Grid>
-            </Grid>
             <Typography variant="subtitle1" gutterBottom>
                 Total Results: {resultsCount}
             </Typography>
@@ -366,185 +316,177 @@ const MainComponent = () => {
             <div role="tabpanel" hidden={activeTab !== 0} id="tabpanel-0" aria-labelledby="tab-0">
                 {activeTab === 0 && (
                     <DataTable
-                    data={data}
-                    summaryData={summaryData}
-                    resultsCount={resultsCount}
-                    queriedKeywords={queriedKeywords}
-                    setData={setData}
-                    updateSummary={updateSummary}
-                    handleDeleteRow={handleDeleteRow}
-                    updateResultsCount={updateResultsCount}
-                    handleCheckboxChange={handleCheckboxChange}
-                    selectedForComparison={selectedForComparison}
-                    handleRequestSort={handleRequestSort}
-                    order={order}
-                    orderBy={orderBy}
-                />
-            )}
-        </div>
-        <div role="tabpanel" hidden={activeTab !== 1} id="tabpanel-1" aria-labelledby="tab-1">
-            {activeTab === 1 && (
-                <>
-                    <Box mb={2} mt={2}>
-                        <Typography variant="h6" component="h2" gutterBottom>
-                            Adjust Price Segment Increment
-                        </Typography>
-                        <Slider
-                            value={priceSegmentIncrement}
-                            onChange={(e, newValue) => setPriceSegmentIncrement(newValue)}
-                            aria-labelledby="price-segment-increment-slider"
-                            valueLabelDisplay="auto"
-                            step={5}
-                            marks={marks}
-                            min={5}
-                            max={50}
-                        />
-                    </Box>
-                    <TableContainer component={Paper}>
-                        <Table size="small" aria-label="price segments table">
-                            <TableHead>
-                                <StyledTableRow>
-                                    <StyledTableCell>Segment</StyledTableCell>
-                                    <StyledTableCell>Average Price</StyledTableCell>
-                                    <StyledTableCell>Number of Products</StyledTableCell>
-                                    <StyledTableCell>Reviews</StyledTableCell>
-                                    <StyledTableCell>Sales</StyledTableCell>
-                                    <StyledTableCell>Revenue</StyledTableCell>
-                                    <StyledTableCell>% of Total Sales</StyledTableCell>
-                                    <StyledTableCell>% of Total Revenue</StyledTableCell>
-                                    <StyledTableCell>Actions</StyledTableCell>
-                                </StyledTableRow>
-                            </TableHead>
-                            <TableBody>
-                                {memoizedPriceSegments.map((segment, index) => (
-                                    <React.Fragment key={index}>
-                                        <StyledTableRow>
-                                            <TableCell>{segment.title}</TableCell>
-                                            <TableCell>{segment.price}</TableCell>
-                                            <TableCell>{segment.productCount}</TableCell>
-                                            <TableCell>{segment.reviews}</TableCell>
-                                            <TableCell>{segment.sales}</TableCell>
-                                            <TableCell>{segment.revenue}</TableCell>
-                                            <TableCell>{segment.percentOfTotalSales}</TableCell>
-                                            <TableCell>{segment.percentOfTotalRevenue}</TableCell>
-                                            <TableCell>
-                                                <IconButton 
-                                                    size="small" 
-                                                    onClick={() => handleSegmentToggle(segment.title)}
-                                                    aria-label={`${expandedSegments[segment.title] ? 'Collapse' : 'Expand'} ${segment.title}`}
-                                                >
-                                                    {expandedSegments[segment.title] ? <ExpandLess /> : <ExpandMore />}
-                                                </IconButton>
-                                            </TableCell>
-                                        </StyledTableRow>
-                                        <TableRow>
-                                            <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
-                                                <Collapse in={expandedSegments[segment.title]} timeout="auto" unmountOnExit>
-                                                    <Box margin={1}>
-                                                        <Table size="small" aria-label={`${segment.title} products`}>
-                                                            <TableHead>
-                                                                <TableRow>
-                                                                    <TableCell>Select</TableCell>
-                                                                    <TableCell>Image</TableCell>
-                                                                    <TableCell>Title</TableCell>
-                                                                    <TableCell>Price</TableCell>
-                                                                    <TableCell>Reviews</TableCell>
-                                                                    <TableCell>Sales</TableCell>
-                                                                    <TableCell>Revenue</TableCell>
-                                                                    <TableCell>Actions</TableCell>
-                                                                </TableRow>
-                                                            </TableHead>
-                                                            <TableBody>
-                                                                {segment.items.map((item, itemIndex) => (
-                                                                    <TableRow key={itemIndex}>
-                                                                        <TableCell>
-                                                                            <Checkbox
-                                                                                checked={selectedForComparison.includes(item.asin)}
-                                                                                onChange={() => handleCheckboxChange(item.asin)}
-                                                                                aria-label={`Select ${item.title} for comparison`}
-                                                                            />
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            <Link href={item.amazonUrl} target="_blank" rel="noopener noreferrer">
-                                                                                <img src={item.imageUrl} alt={item.title} style={{ width: 50, height: 50 }} />
-                                                                            </Link>
-                                                                        </TableCell>
-                                                                        <TableCell>{item.title}</TableCell>
-                                                                        <TableCell>{item.price}</TableCell>
-                                                                        <TableCell>{item.reviews}</TableCell>
-                                                                        <TableCell>{item.sales}</TableCell>
-                                                                        <TableCell>{item.revenue}</TableCell>
-                                                                        <TableCell>
-                                                                            <IconButton 
-                                                                                size="small" 
-                                                                                onClick={() => handleDeleteRow(item.asin)}
-                                                                                aria-label={`Delete ${item.title}`}
-                                                                            >
-                                                                                <Delete />
-                                                                            </IconButton>
-                                                                        </TableCell>
+                        data={data}
+                        summaryData={summaryData}
+                        handleCheckboxChange={handleCheckboxChange}
+                        selectedForComparison={selectedForComparison}
+                        handleRequestSort={handleRequestSort}
+                        order={order}
+                        orderBy={orderBy}
+                        handleCompare={handleCompare}
+                        handleDeleteRow={handleDeleteRow}
+                    />
+                )}
+            </div>
+            <div role="tabpanel" hidden={activeTab !== 1} id="tabpanel-1" aria-labelledby="tab-1">
+                {activeTab === 1 && (
+                    <>
+                        <Box mb={2} mt={2}>
+                            <Typography variant="h6" component="h2" gutterBottom>
+                                Adjust Price Segment Increment
+                            </Typography>
+                            <Slider
+                                value={priceSegmentIncrement}
+                                onChange={(e, newValue) => setPriceSegmentIncrement(newValue)}
+                                aria-labelledby="price-segment-increment-slider"
+                                valueLabelDisplay="auto"
+                                step={5}
+                                marks={marks}
+                                min={5}
+                                max={50}
+                            />
+                        </Box>
+                        <TableContainer component={Paper}>
+                            <Table size="small" aria-label="price segments table">
+                                <TableHead>
+                                    <StyledTableRow>
+                                        <StyledTableCell>Segment</StyledTableCell>
+                                        <StyledTableCell>Average Price</StyledTableCell>
+                                        <StyledTableCell>Number of Products</StyledTableCell>
+                                        <StyledTableCell>Reviews</StyledTableCell>
+                                        <StyledTableCell>Sales</StyledTableCell>
+                                        <StyledTableCell>Revenue</StyledTableCell>
+                                        <StyledTableCell>% of Total Sales</StyledTableCell>
+                                        <StyledTableCell>% of Total Revenue</StyledTableCell>
+                                        <StyledTableCell>Actions</StyledTableCell>
+                                    </StyledTableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {memoizedPriceSegments.map((segment, index) => (<React.Fragment key={index}>
+                                            <StyledTableRow>
+                                                <TableCell>{segment.title}</TableCell>
+                                                <TableCell>{segment.price}</TableCell>
+                                                <TableCell>{segment.productCount}</TableCell>
+                                                <TableCell>{formatNumberWithCommas(segment.reviews)}</TableCell>
+                                                <TableCell>{formatNumberWithCommas(segment.sales)}</TableCell>
+                                                <TableCell>${formatNumberWithCommas(segment.revenue)}</TableCell>
+                                                <TableCell>{segment.percentOfTotalSales}</TableCell>
+                                                <TableCell>{segment.percentOfTotalRevenue}</TableCell>
+                                                <TableCell>
+                                                    <IconButton 
+                                                        size="small" 
+                                                        onClick={() => handleSegmentToggle(segment.title)}
+                                                        aria-label={`${expandedSegments[segment.title] ? 'Collapse' : 'Expand'} ${segment.title}`}
+                                                    >
+                                                        {expandedSegments[segment.title] ? <ExpandLess /> : <ExpandMore />}
+                                                    </IconButton>
+                                                </TableCell>
+                                            </StyledTableRow>
+                                            <TableRow>
+                                                <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
+                                                    <Collapse in={expandedSegments[segment.title]} timeout="auto" unmountOnExit>
+                                                        <Box margin={1}>
+                                                            <Table size="small" aria-label={`${segment.title} products`}>
+                                                                <TableHead>
+                                                                    <TableRow>
+                                                                        <TableCell>Select</TableCell>
+                                                                        <TableCell>Image</TableCell>
+                                                                        <TableCell>Title</TableCell>
+                                                                        <TableCell>Price</TableCell>
+                                                                        <TableCell>Reviews</TableCell>
+                                                                        <TableCell>Sales</TableCell>
+                                                                        <TableCell>Revenue</TableCell>
+                                                                        <TableCell>Actions</TableCell>
                                                                     </TableRow>
-                                                                ))}
-                                                            </TableBody>
-                                                        </Table>
-                                                    </Box>
-                                                </Collapse>
-                                            </TableCell>
-                                        </TableRow>
-                                    </React.Fragment>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </>
-            )}
-        </div>
-        <div role="tabpanel" hidden={activeTab !== 2} id="tabpanel-2" aria-labelledby="tab-2">
-            {activeTab === 2 && (
-                <DataTable
-                    data={winningProducts}
-                    summaryData={null}
-                    resultsCount={winningProducts.length}
-                    queriedKeywords={[]}
-                    setData={setWinningProducts}
-                    updateSummary={() => {}}
-                    handleDeleteRow={() => {}}
-                    updateResultsCount={() => {}}
-                    handleCheckboxChange={handleCheckboxChange}
-                    selectedForComparison={selectedForComparison}
-                    handleRequestSort={handleRequestSort}
-                    order={order}
-                    orderBy={orderBy}
-                />
-            )}
-        </div>
-        <div role="tabpanel" hidden={activeTab !== 3} id="tabpanel-3" aria-labelledby="tab-3">
-            {activeTab === 3 && (
-                <>
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} md={6}>
-                            <PieCharts data={data.slice(1)} type="sellerType" />
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <PieCharts data={data.slice(1)} type="brand" />
-                        </Grid>
-                    </Grid>
-                    <Box mt={4}>
-                        <Typography variant="h6" component="h2" gutterBottom>
-                            Timeline of Dates First Available
-                        </Typography>
-                        <TimelineChart data={data.slice(1)} />
-                    </Box>
-                </>
-            )}
-        </div>
-        <div role="tabpanel" hidden={activeTab !== 4} id="tabpanel-4" aria-labelledby="tab-4">
-            {activeTab === 4 && (
-                <ProductComparison products={comparisonProducts} />
-            )}
-        </div>
-    </Container>
-);
+                                                                </TableHead>
+                                                                <TableBody>
+                                                                    {segment.items.map((item, itemIndex) => (
+                                                                        <TableRow key={itemIndex}>
+                                                                            <TableCell>
+                                                                                <Checkbox
+                                                                                    checked={selectedForComparison.includes(item.asin)}
+                                                                                    onChange={() => handleCheckboxChange(item.asin)}
+                                                                                    aria-label={`Select ${item.title} for comparison`}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <Link href={item.amazonUrl} target="_blank" rel="noopener noreferrer">
+                                                                                    <img src={item.imageUrl} alt={item.title} style={{ width: 50, height: 50 }} />
+                                                                                </Link>
+                                                                            </TableCell>
+                                                                            <TableCell>{item.title}</TableCell>
+                                                                            <TableCell>${formatNumberWithCommas(item.price)}</TableCell>
+                                                                            <TableCell>{formatNumberWithCommas(item.reviews)}</TableCell>
+                                                                            <TableCell>{formatNumberWithCommas(item.sales)}</TableCell>
+                                                                            <TableCell>${formatNumberWithCommas(item.revenue)}</TableCell>
+                                                                            <TableCell>
+                                                                                <IconButton 
+                                                                                    size="small" 
+                                                                                    onClick={() => handleDeleteRow(item.asin)}
+                                                                                    aria-label={`Delete ${item.title}`}
+                                                                                >
+                                                                                    <Delete />
+                                                                                </IconButton>
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </Box>
+                                                    </Collapse>
+                                                </TableCell>
+                                            </TableRow>
+                                        </React.Fragment>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </>
+                )}
+            </div>
+            <div role="tabpanel" hidden={activeTab !== 2} id="tabpanel-2" aria-labelledby="tab-2">
+                {activeTab === 2 && (
+                    <DataTable
+                        data={winningProducts}
+                        summaryData={summaryData}
+                        handleCheckboxChange={handleCheckboxChange}
+                        selectedForComparison={selectedForComparison}
+                        handleRequestSort={handleRequestSort}
+                        order={order}
+                        orderBy={orderBy}
+                        handleCompare={handleCompare}
+                        handleDeleteRow={handleDeleteRow}
+                    />
+                )}
+            </div>
+            <div role="tabpanel" hidden={activeTab !== 3} id="tabpanel-3" aria-labelledby="tab-3">
+                {activeTab === 3 && (
+                    <>
+                        <Box mt={4}>
+                            <Typography variant="h6" component="h2" gutterBottom>
+                                Price vs Sales Scatter Plot
+                            </Typography>
+                            <ScatterPlot data={data.filter(item => item.asin !== 'Summary')} />
+                        </Box>
+                        <Box mt={4}>
+                            <PieCharts data={data.filter(item => item.asin !== 'Summary')} />
+                        </Box>
+                        <Box mt={4}>
+                            <Typography variant="h6" component="h2" gutterBottom>
+                                Timeline of Dates First Available
+                            </Typography>
+                            <TimelineChart data={data.filter(item => item.asin !== 'Summary')} />
+                        </Box>
+                    </>
+                )}
+            </div>
+            <div role="tabpanel" hidden={activeTab !== 4} id="tabpanel-4" aria-labelledby="tab-4">
+                {activeTab === 4 && (
+                    loading ? <CircularProgress /> : <ProductComparison products={comparisonProducts} />
+                )}
+            </div>
+        </Container>
+    );
 };
 
 export default MainComponent;
