@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Grid, Card, CardContent, Typography, CardMedia, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Box, Button, CircularProgress } from '@mui/material';
+import { Container, Grid, Card, CardContent, Typography, CardMedia, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Box, Button, CircularProgress, Collapse, IconButton } from '@mui/material';
 import Lightbox from 'react-image-lightbox';
 import 'react-image-lightbox/style.css';
 import { Parser } from 'json2csv';
 import { fetchFeatureSummaryWithBackoff, fetchCombinedFeatureSummaryWithBackoff } from '../utils/api';
+import { ExpandMore, ExpandLess } from '@mui/icons-material';
 
 const ProductComparison = ({ products = [] }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -12,6 +13,8 @@ const ProductComparison = ({ products = [] }) => {
   const [featureSummaries, setFeatureSummaries] = useState([]);
   const [combinedFeatureSummary, setCombinedFeatureSummary] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [expandedSpecifications, setExpandedSpecifications] = useState({});
+  const [expandedFeatureBullets, setExpandedFeatureBullets] = useState({});
 
   useEffect(() => {
     console.log('Products received:', products);
@@ -31,10 +34,12 @@ const ProductComparison = ({ products = [] }) => {
       for (const product of products) {
         const featureBullets = product.product?.feature_bullets || product.feature_bullets || [];
         const attributes = product.product?.attributes || product.attributes || [];
+        const images = product.product?.images || product.images || [];
         console.log('Feature bullets:', featureBullets); // Log the feature bullets
         console.log('Attributes:', attributes); // Log the attributes
+        console.log('Images:', images); // Log the images
         if (featureBullets.length > 0 || attributes.length > 0) {
-          const summary = await fetchFeatureSummaryWithBackoff(featureBullets, attributes);
+          const summary = await fetchFeatureSummaryWithBackoff(featureBullets, attributes, images);
           console.log('Feature summary:', summary); // Log the feature summary
           summaries.push(summary);
           await delay(3000); // Delay between each request
@@ -53,7 +58,8 @@ const ProductComparison = ({ products = [] }) => {
       const allFeatures = products.map(product => {
         const featureBullets = product.product?.feature_bullets || product.feature_bullets || [];
         const attributes = product.product?.attributes || product.attributes || [];
-        return `Product ${product.product?.title || product.title || 'Unnamed Product'}:\nFeatures:\n${featureBullets.join('\n')}\nAttributes:\n${attributes.map(attr => `${attr.name}: ${attr.value}`).join('\n')}`;
+        const images = product.product?.images || product.images || [];
+        return `Product ${product.product?.title || product.title || 'Unnamed Product'}:\nImages:\n${images.map(img => (typeof img === 'string' ? img : img.url || img.link)).join('\n')}\nFeatures:\n${featureBullets.join('\n')}\nAttributes:\n${attributes.map(attr => `${attr.name}: ${attr.value}`).join('\n')}`;
       });
       const summary = await fetchCombinedFeatureSummaryWithBackoff(allFeatures);
       console.log('Combined feature summary:', summary); // Log the combined feature summary
@@ -71,25 +77,41 @@ const ProductComparison = ({ products = [] }) => {
     setLightboxOpen(true);
   };
 
-  const renderSpecifications = (specifications) => (
-    <TableContainer component={Paper} sx={{ width: '100%', marginBottom: 2 }}>
-      <Table size="small" aria-label="specifications table">
-        <TableHead>
-          <TableRow>
-            <TableCell><strong>Specification</strong></TableCell>
-            <TableCell><strong>Value</strong></TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {specifications && specifications.map((spec, index) => (
-            <TableRow key={index}>
-              <TableCell component="th" scope="row">{spec.name}</TableCell>
-              <TableCell>{spec.value}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+  const handleExpandSpecifications = (index) => {
+    setExpandedSpecifications(prevState => ({ ...prevState, [index]: !prevState[index] }));
+  };
+
+  const handleExpandFeatureBullets = (index) => {
+    setExpandedFeatureBullets(prevState => ({ ...prevState, [index]: !prevState[index] }));
+  };
+
+  const renderSpecifications = (specifications, index) => (
+    <Box>
+      <Box display="flex" alignItems="center" onClick={() => handleExpandSpecifications(index)} sx={{ cursor: 'pointer' }}>
+        <Typography variant="h6" sx={{ marginRight: 1 }}>Specifications</Typography>
+        {expandedSpecifications[index] ? <ExpandLess /> : <ExpandMore />}
+      </Box>
+      <Collapse in={expandedSpecifications[index]} timeout="auto" unmountOnExit>
+        <TableContainer component={Paper} sx={{ width: '100%', marginBottom: 2 }}>
+          <Table size="small" aria-label="specifications table">
+            <TableHead>
+              <TableRow>
+                <TableCell><strong>Specification</strong></TableCell>
+                <TableCell><strong>Value</strong></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {specifications && specifications.map((spec, specIndex) => (
+                <TableRow key={specIndex}>
+                  <TableCell component="th" scope="row">{spec.name}</TableCell>
+                  <TableCell>{spec.value}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Collapse>
+    </Box>
   );
 
   const renderAttributes = (attributes) => (
@@ -113,12 +135,20 @@ const ProductComparison = ({ products = [] }) => {
     </TableContainer>
   );
 
-  const renderFeatureBullets = (featureBullets) => (
-    <ul>
-      {featureBullets && featureBullets.map((bullet, index) => (
-        <li key={index} style={{ marginBottom: '10px' }}>{bullet}</li>
-      ))}
-    </ul>
+  const renderFeatureBullets = (featureBullets, index) => (
+    <Box>
+      <Box display="flex" alignItems="center" onClick={() => handleExpandFeatureBullets(index)} sx={{ cursor: 'pointer' }}>
+        <Typography variant="h6" sx={{ marginRight: 1 }}>Feature Bullets</Typography>
+        {expandedFeatureBullets[index] ? <ExpandLess /> : <ExpandMore />}
+      </Box>
+      <Collapse in={expandedFeatureBullets[index]} timeout="auto" unmountOnExit>
+        <ul>
+          {featureBullets && featureBullets.map((bullet, bulletIndex) => (
+            <li key={bulletIndex} style={{ marginBottom: '10px' }}>{bullet}</li>
+          ))}
+        </ul>
+      </Collapse>
+    </Box>
   );
 
   const renderFeatureSummary = (summary) => (
@@ -218,12 +248,12 @@ const ProductComparison = ({ products = [] }) => {
 
     const mainImage = product.main_image?.link || product.main_image || product.images?.[0]?.link || product.images?.[0] || '';
     const thumbnailImages = product.images || [];
-    const price = product.price?.value || product.price || 'N/A';
-    const sales = product.sales || 'N/A';
-    const revenue = product.revenue || 'N/A';
+    const price = parseFloat(product.price?.toString().replace(/[,$]/g, '')) || 'N/A';
+    const sales = parseInt(product.sales?.toString().replace(/,/g, '')) || 'N/A';
+    const revenue = parseFloat(product.revenue?.toString().replace(/[,$]/g, '')) || 'N/A';
 
     return (
-      <Card key={index} sx={{ minWidth: 300, maxWidth: 300, margin: 1, display: 'inline-block', flex: '0 0 auto' }}>
+      <Card key={index} sx={{ minWidth: 400, maxWidth: 400, margin: 1, display: 'inline-block', flex: '0 0 auto' }}>
         {mainImage && (
           <CardMedia
             component="img"
@@ -243,12 +273,10 @@ const ProductComparison = ({ products = [] }) => {
           <Typography variant="body1"><strong>Revenue:</strong> ${typeof revenue === 'number' ? revenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : revenue}</Typography>
           {renderFeatureSummary(featureSummaries[index])}
           {renderImageThumbnails(thumbnailImages)}
-          <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Specifications</Typography>
-          {renderSpecifications(product.specifications)}
           <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Attributes</Typography>
           {renderAttributes(product.attributes)}
-          <Typography variant="h6" sx={{ marginTop: 2, marginBottom: 1 }}>Feature Bullets</Typography>
-          {renderFeatureBullets(product.feature_bullets)}
+          {renderSpecifications(product.specifications, index)}
+          {renderFeatureBullets(product.feature_bullets, index)}
         </CardContent>
       </Card>
     );

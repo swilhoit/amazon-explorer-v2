@@ -197,31 +197,41 @@ const MainComponent = () => {
 
     const fetchComparisonProducts = useCallback(async () => {
         setLoading(true);
-        const productsForComparison = [];
-        for (const asin of selectedForComparison) {
-            try {
+        try {
+          const productsForComparison = await Promise.all(
+            selectedForComparison.map(async (asin) => {
+              try {
                 const productDetails = await fetchProductDetailsFromRainforest(asin);
-                // Find the corresponding product in the main data table
                 const mainTableProduct = data.find(item => item.asin === asin);
                 if (mainTableProduct) {
-                    // Merge the data from the main table with the Rainforest data
-                    productsForComparison.push({
-                        ...productDetails,
-                        sales: mainTableProduct.sales,
-                        revenue: mainTableProduct.revenue,
-                        price: mainTableProduct.price
-                    });
+                  console.log(`Found main table product for ASIN ${asin}:`, mainTableProduct);
+                  return {
+                    ...productDetails,
+                    sales: mainTableProduct.sales,
+                    revenue: mainTableProduct.revenue,
+                    price: mainTableProduct.price
+                  };
                 } else {
-                    productsForComparison.push(productDetails);
+                  return productDetails;
                 }
-            } catch (error) {
+              } catch (error) {
                 console.error(`Error fetching details for ASIN: ${asin}`, error);
                 setErrorMessage(`Failed to fetch details for ASIN: ${asin}`);
-            }
+                return null;
+              }
+            })
+          );
+          console.log('Products for comparison:', productsForComparison);
+          setComparisonProducts(productsForComparison.filter(Boolean));
+        } catch (error) {
+          console.error('Error fetching comparison products:', error);
+          setErrorMessage('Failed to fetch comparison products');
+        } finally {
+          setLoading(false);
         }
-        setComparisonProducts(productsForComparison);
-        setLoading(false);
-    }, [selectedForComparison, data]);
+      }, [selectedForComparison, data]);
+      
+      
 
     const handleCompare = useCallback(() => {
         fetchComparisonProducts();

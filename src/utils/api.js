@@ -183,6 +183,7 @@ export const fetchProductDetailsFromRainforest = async (asin) => {
     }
 };
 
+
 export const fetchFeatureSummary = async (featureBullets, attributes) => {
     const featureText = featureBullets.join('\n');
     const attributeText = attributes.map(attr => `${attr.name}: ${attr.value}`).join('\n');
@@ -210,7 +211,7 @@ export const fetchFeatureSummary = async (featureBullets, attributes) => {
 export const fetchCombinedFeatureSummary = async (productFeatures) => {
     const messages = [
         {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": `Compare and summarize the following features and attributes from multiple products. Highlight key differences in 3-5 concise bullet points:\n\n${productFeatures.join('\n\n')}\n\nSummary:`}
+        {"role": "user", "content": `Analyze the following features and attributes from multiple products. Highlight key differences though in-depth analysis. Finally offer competetive advice on how to compete with these products through innovating features in this category:\n\n${productFeatures.join('\n\n')}\n\nSummary:`}
     ];
 
     const payload = {
@@ -229,54 +230,58 @@ export const fetchCombinedFeatureSummary = async (productFeatures) => {
 };
 
 // Exporting functions with exponential backoff
-export const fetchFeatureSummaryWithBackoff = async (featureBullets, attributes, retries = 5, delay = 2000) => {
+export const fetchFeatureSummaryWithBackoff = async (featureBullets, attributes, images, retries = 5, delay = 2000) => {
     for (let i = 0; i < retries; i++) {
-        try {
-            console.log('GPT Headers in fetchFeatureSummaryWithBackoff:', gptHeaders);
-            const featureText = featureBullets.join('\n');
-            const attributeText = attributes.map(attr => `${attr.name}: ${attr.value}`).join('\n');
-            const response = await axios.post(GPT_API_BASE_URL, {
-                model: "gpt-4",
-                messages: [
-                    { role: "system", content: "You are a helpful assistant." },
-                    { role: "user", content: `Summarize the following features and attributes in 3-5 concise bullet points. Focus on what makes this product different and unique from the others:\n\nFeatures:\n${featureText}\n\nAttributes:\n${attributeText}\n\nSummary:` }
-                ]
-            }, {
-                headers: gptHeaders
-            });
-            const summary = response.data.choices[0].message.content.trim().split('\n').filter(point => point.length > 0);
-            return Array.isArray(summary) ? summary : [];
-        } catch (error) {
-            if (i === retries - 1) throw error;
-            const jitter = Math.random() * 1000; // Add random jitter to spread out requests
-            console.error(`Retry ${i + 1}/${retries} failed: ${error.message}`);
-            await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i) + jitter));
-        }
+      try {
+        const featureText = featureBullets.join('\n');
+        const attributeText = attributes.map(attr => `${attr.name}: ${attr.value}`).join('\n');
+        const imageText = images.map(img => (typeof img === 'string' ? img : img.url || img.link)).join('\n');
+        
+        const response = await axios.post(GPT_API_BASE_URL, {
+          model: "gpt-4",
+          messages: [
+            { role: "system", content: "You are a helpful assistant." },
+            { role: "user", content: `What are the 3 most important defining features of this product that make it unique? Focus on what makes this product different and unique from the others such as materials and features. Do not write full sentences, abbreviate to list the traits in list format. Don't list any traits that are the same for multiple items, only include features that are completely unique to each item. Do not use dashes, only bullet points. The purpose of this section is to compare the items against each other to determine which features make them unique.:\n\nImages:\n${imageText}\n\nFeatures:\n${featureText}\n\nAttributes:\n${attributeText}\n\nSummary:` }
+          ]
+        }, {
+          headers: gptHeaders
+        });
+        const summary = response.data.choices[0].message.content.trim().split('\n').filter(point => point.length > 0);
+        return Array.isArray(summary) ? summary : [];
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        const jitter = Math.random() * 1000; // Add random jitter to spread out requests
+        console.error(`Retry ${i + 1}/${retries} failed: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i) + jitter));
+      }
     }
-};
+  };
+  
+  
 
-export const fetchCombinedFeatureSummaryWithBackoff = async (allFeatures, retries = 5, delay = 2000) => {
+  export const fetchCombinedFeatureSummaryWithBackoff = async (allFeatures, retries = 5, delay = 2000) => {
     for (let i = 0; i < retries; i++) {
-        try {
-            console.log('GPT Headers in fetchCombinedFeatureSummaryWithBackoff:', gptHeaders);
-            const response = await axios.post(GPT_API_BASE_URL, {
-                model: "gpt-4",
-                messages: [
-                    { role: "system", content: "You are a helpful assistant." },
-                    { role: "user", content: `Summarize the following features from multiple compared products in 3-5 concise bullet points. Focus on what makes each product different and unique from the others:\n\n${allFeatures.join('\n\n')}\n\nSummary:` }
-                ]
-            }, {
-                headers: gptHeaders
-            });
-            const summary = response.data.choices[0].message.content.trim().split('\n').filter(point => point.length > 0);
-            return Array.isArray(summary) ? summary : [];
-        } catch (error) {
-            if (i === retries - 1) throw error;
-            const jitter = Math.random() * 1000; // Add random jitter to spread out requests
-            console.error(`Retry ${i + 1}/${retries} failed: ${error.message}`);
-            await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i) + jitter));
-        }
+      try {
+        const response = await axios.post(GPT_API_BASE_URL, {
+          model: "gpt-4",
+          messages: [
+            { role: "system", content: "You are a helpful assistant." },
+            { role: "user", content: `What are the differences between each of these products? Find common attribute types that can be compared. Focus on what makes each product different and unique from the others. The purpose of this section is to compare the items against each other to determine which features make them unique. Limit this to 100 words:\n\n${allFeatures.join('\n\n')}\n\nSummary:` }
+          ]
+        }, {
+          headers: gptHeaders
+        });
+        const summary = response.data.choices[0].message.content.trim().split('\n').filter(point => point.length > 0);
+        return Array.isArray(summary) ? summary : [];
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        const jitter = Math.random() * 1000; // Add random jitter to spread out requests
+        console.error(`Retry ${i + 1}/${retries} failed: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i) + jitter));
+      }
     }
-};
+  };
+  
+  
 
 export { fetchWithExponentialBackoff };
