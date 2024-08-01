@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { createStore, applyMiddleware, compose } from 'redux';
-import { thunk } from 'redux-thunk';  // Changed this line
+import { thunk } from 'redux-thunk';
 import rootReducer from './reducers';
 import Layout from './Layout';
 import MainComponent from './components/MainComponent';
@@ -11,6 +11,7 @@ import RelatedKeywords from './components/RelatedKeywords';
 import ProductComparison from './components/ProductComparison';
 import ProductKeywordGenerator from './components/ProductKeywordGenerator';
 import AdCreativesDashboard from './components/AdCreativesDashboard';
+import CalculatorComponent from './components/CalculatorComponent'; // Import the Calculator component
 
 // Enable Redux DevTools Extension
 const composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
@@ -29,6 +30,12 @@ ReactDOM.render(
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<MainComponent />} />
+            <Route path="price-segments" element={<MainComponent activeTab={1} />} />
+            <Route path="winners" element={<MainComponent activeTab={2} />} />
+            <Route path="insights" element={<MainComponent activeTab={3} />} />
+            <Route path="comparison" element={<MainComponent activeTab={4} />} />
+            <Route path="segment-by-feature" element={<MainComponent activeTab={5} />} />
+            <Route path="calculator" element={<CalculatorComponent />} />
             <Route path="related-keywords" element={<RelatedKeywords />} />
             <Route path="product-comparison" element={<ProductComparison asins={sampleAsins} />} />
             <Route path="keyword-generator" element={<ProductKeywordGenerator />} />

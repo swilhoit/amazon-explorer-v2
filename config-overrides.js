@@ -8,7 +8,8 @@ module.exports = function override(config, env) {
     os: require.resolve("os-browserify/browser"),
     path: require.resolve("path-browserify"),
     fs: false,
-    process: require.resolve("process/browser")
+    process: require.resolve("process/browser"),
+    buffer: require.resolve("buffer")
   };
   
   config.plugins = [
@@ -18,6 +19,25 @@ module.exports = function override(config, env) {
       Buffer: ["buffer", "Buffer"],
     }),
   ];
+
+  // Add resolver for .mjs files
+  config.resolve.extensions.push('.mjs');
+
+  // Add specific rule for groq-sdk
+  config.module.rules.push({
+    test: /\.mjs$/,
+    include: /node_modules\/groq-sdk/,
+    type: "javascript/auto",
+    use: {
+      loader: 'babel-loader',
+      options: {
+        presets: ['@babel/preset-env'],
+        plugins: [
+          ['@babel/plugin-transform-modules-commonjs', { strictMode: false }]
+        ]
+      }
+    }
+  });
 
   return config;
 }

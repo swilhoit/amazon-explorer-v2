@@ -41,10 +41,8 @@ const CSVUpload = ({ onDataUpload, setLoading }) => {
             {({ getRootProps, acceptedFile, ProgressBar, getRemoveFileProps }) => (
                 <>
                     <Button variant="contained" {...getRootProps()}>
-                        Upload CSV
+                        Upload
                     </Button>
-               
-                    
                 </>
             )}
         </CSVReader>

@@ -12,7 +12,6 @@ export const processData = (csvData) => {
             return null;
         }
 
-        // Ensure sales is always a number
         let sales = 0;
         if (row['Sales'] && typeof row['Sales'] === 'string') {
             sales = parseInt(row['Sales'].replace(/,/g, ''), 10);
@@ -20,7 +19,6 @@ export const processData = (csvData) => {
             sales = row['Sales'];
         }
 
-        // Ensure revenue is always a number and rounded to the nearest whole number
         let revenue = 0;
         if (row['Revenue'] && typeof row['Revenue'] === 'string') {
             revenue = Math.round(parseFloat(row['Revenue'].replace(/[,$]/g, '')));
@@ -28,7 +26,6 @@ export const processData = (csvData) => {
             revenue = Math.round(row['Revenue']);
         }
 
-        // If we have revenue but no sales, estimate sales
         if (revenue > 0 && sales === 0) {
             const price = parseFloat(row['Price  $']) || 0;
             if (price > 0) {
@@ -73,7 +70,6 @@ export const processData = (csvData) => {
     console.log('ProcessData - Output:', finalData);
     return finalData;
 };
-
 
 export const updateSummary = (data) => {
     console.log('UpdateSummary - Input:', data);

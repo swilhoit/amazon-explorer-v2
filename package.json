@@ -7,13 +7,14 @@
     "@emotion/styled": "^11.11.5",
     "@material-ui/core": "^4.12.4",
     "@material-ui/icons": "^4.11.3",
-    "@mui/icons-material": "^5.15.20",
+    "@mui/icons-material": "^5.16.6",
     "@mui/material": "^5.15.20",
     "axios": "^1.7.2",
     "buffer": "^6.0.3",
     "chart.js": "^4.4.3",
     "crypto-browserify": "^3.12.0",
     "file-saver": "^2.0.5",
+    "groq-sdk": "^0.5.0",
     "json2csv": "^6.0.0-alpha.2",
     "os-browserify": "^0.3.0",
     "papaparse": "^5.3.0",
@@ -38,7 +39,8 @@
     "start": "react-app-rewired start",
     "build": "react-app-rewired build",
     "test": "react-app-rewired test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "postinstall": "node patch-groq-sdk.js"
   },
   "eslintConfig": {
     "extends": [
@@ -59,8 +61,13 @@
     ]
   },
   "devDependencies": {
+    "@babel/core": "^7.25.2",
     "@babel/plugin-proposal-class-properties": "^7.18.6",
     "@babel/plugin-proposal-private-methods": "^7.18.6",
-    "@babel/plugin-transform-runtime": "^7.24.7"
+    "@babel/plugin-transform-modules-commonjs": "^7.24.8",
+    "@babel/plugin-transform-runtime": "^7.24.7",
+    "@babel/preset-env": "^7.25.2",
+    "@types/dotenv": "^8.2.0",
+    "babel-loader": "^9.1.3"
   }
 }

@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-    TextField, Button, Typography, Box, CircularProgress, Tabs, Tab,
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-    Container, Checkbox, Grid, Slider, Collapse, IconButton, Link
+    Typography, Box, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+    Container, Checkbox, Slider, Collapse, IconButton, Link
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { ExpandMore, ExpandLess, Delete } from '@mui/icons-material';
 import DataTable from './DataTable';
 import { ScatterPlot, PieCharts, TimelineChart } from './Charts';
 import ProductComparison from './ProductComparison';
-import CSVUpload from './CSVUpload';
 import { fetchTopKeywords, fetchDataForKeywords, fetchProductDetailsFromRainforest } from '../utils/api';
 import { updateSummary, getPriceSegments, processData, formatNumberWithCommas } from '../utils/dataProcessing';
+import FeatureSegments from './FeatureSegments';
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
     backgroundColor: theme.palette.common.black,
@@ -41,15 +40,11 @@ const marks = [
     { value: 50, label: '$50' },
 ];
 
-const MainComponent = () => {
-    const [keywords, setKeywords] = useState('');
+const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) => {
     const [data, setData] = useState([]);
     const [summaryData, setSummaryData] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState(0);
     const [resultsCount, setResultsCount] = useState(0);
-    const [queriedKeywords, setQueriedKeywords] = useState([]);
-    const [selectedKeywords, setSelectedKeywords] = useState({});
     const [keywordResults, setKeywordResults] = useState({});
     const [priceSegmentIncrement, setPriceSegmentIncrement] = useState(5);
     const [expandedSegments, setExpandedSegments] = useState({});
@@ -67,25 +62,26 @@ const MainComponent = () => {
         localStorage.setItem('keywordCache', JSON.stringify(cache));
     }, [cache]);
 
-    const handleKeywordsChange = (event) => {
-        setKeywords(event.target.value);
-    };
+    useEffect(() => {
+        if (uploadedData && uploadedData.length > 0) {
+            const summary = updateSummary(uploadedData);
+            setSummaryData(summary);
+            setData(uploadedData);
+            setResultsCount(uploadedData.length);
+            setKeywordResults({});
+        }
+    }, [uploadedData]);
 
-    const handleTabChange = (event, newValue) => {
-        setActiveTab(newValue);
-        if (newValue === 2 && winningProducts.length === 0) {
-            fetchWinningProducts();
+    // Fetch data when the keywords prop changes
+    useEffect(() => {
+        if (keywords) {
+            handleFetchData();
         }
-        if (newValue === 4) {
-            fetchComparisonProducts();
-        }
-    };
+    }, [keywords]);
 
     const handleFetchData = async () => {
         setLoading(true);
         setData([]);
-        setQueriedKeywords([]);
-        setSelectedKeywords({});
         setKeywordResults({});
         setErrorMessage('');
         console.log('Fetching data for keywords:', keywords);
@@ -95,17 +91,14 @@ const MainComponent = () => {
             setData(cachedData.data || []);
             setSummaryData(cachedData.summaryData || null);
             setResultsCount(cachedData.resultsCount || 0);
-            setQueriedKeywords(cachedData.queriedKeywords || []);
-            setSelectedKeywords(cachedData.selectedKeywords || {});
             setKeywordResults(cachedData.keywordResults || {});
             setLoading(false);
             return;
         }
 
         try {
-            const topKeywords = await fetchTopKeywords(keywords);
+            const topKeywords = await fetchTopKeywords(keywords.split(',').map(keyword => keyword.trim())); // Ensure keywords are split into an array
             const uniqueTopKeywords = Array.from(new Set([keywords, ...topKeywords.filter(k => k.toLowerCase() !== keywords.toLowerCase())]));
-            setQueriedKeywords(uniqueTopKeywords);
 
             const allResults = await fetchDataForKeywords(uniqueTopKeywords);
             const totalResults = allResults.flat();
@@ -126,21 +119,12 @@ const MainComponent = () => {
 
             setKeywordResults(keywordResults);
 
-            const initialSelectedKeywords = uniqueTopKeywords.reduce((acc, keyword) => {
-                acc[keyword] = true;
-                return acc;
-            }, {});
-
-            setSelectedKeywords(initialSelectedKeywords);
-
             setCache(prevCache => ({
                 ...prevCache,
                 [keywords]: {
                     data: [summary, ...processedResults],
                     summaryData: summary,
                     resultsCount: processedResults.length,
-                    queriedKeywords: uniqueTopKeywords,
-                    selectedKeywords: initialSelectedKeywords,
                     keywordResults: keywordResults,
                 }
             }));
@@ -151,25 +135,6 @@ const MainComponent = () => {
 
         setLoading(false);
     };
-
-    const handleToggleKeyword = useCallback((keyword) => {
-        setSelectedKeywords(prev => {
-            const updated = { ...prev, [keyword]: !prev[keyword] };
-            updateDataForSelectedKeywords(updated);
-            return updated;
-        });
-    }, []);
-
-    const updateDataForSelectedKeywords = useCallback((updatedSelectedKeywords) => {
-        const activeKeywords = Object.keys(updatedSelectedKeywords).filter(keyword => updatedSelectedKeywords[keyword]);
-        const activeResults = activeKeywords.flatMap(keyword => keywordResults[keyword] || []).filter(item => item);
-
-        const processedResults = processData(activeResults);
-        const summary = updateSummary(processedResults);
-
-        setSummaryData(summary);
-        setData([summary, ...processedResults]);
-    }, [keywordResults]);
 
     const handleSegmentToggle = useCallback((segment) => {
         setExpandedSegments(prev => ({ ...prev, [segment]: !prev[segment] }));
@@ -182,11 +147,11 @@ const MainComponent = () => {
         });
     }, []);
 
-    const updateResultsCount = useCallback((count) => {
-        setResultsCount(count);
-    }, []);
-
     const fetchWinningProducts = useCallback(() => {
+        if (!Array.isArray(data) || data.length === 0) {
+            console.error('Invalid input: data is not an array or is empty');
+            return;
+        }
         const priceSegments = getPriceSegments(data, priceSegmentIncrement, summaryData);
         const winners = priceSegments.map(segment => {
             const sortedItems = segment.items.sort((a, b) => b.sales - a.sales);
@@ -198,44 +163,41 @@ const MainComponent = () => {
     const fetchComparisonProducts = useCallback(async () => {
         setLoading(true);
         try {
-          const productsForComparison = await Promise.all(
-            selectedForComparison.map(async (asin) => {
-              try {
-                const productDetails = await fetchProductDetailsFromRainforest(asin);
-                const mainTableProduct = data.find(item => item.asin === asin);
-                if (mainTableProduct) {
-                  console.log(`Found main table product for ASIN ${asin}:`, mainTableProduct);
-                  return {
-                    ...productDetails,
-                    sales: mainTableProduct.sales,
-                    revenue: mainTableProduct.revenue,
-                    price: mainTableProduct.price
-                  };
-                } else {
-                  return productDetails;
-                }
-              } catch (error) {
-                console.error(`Error fetching details for ASIN: ${asin}`, error);
-                setErrorMessage(`Failed to fetch details for ASIN: ${asin}`);
-                return null;
-              }
-            })
-          );
-          console.log('Products for comparison:', productsForComparison);
-          setComparisonProducts(productsForComparison.filter(Boolean));
+            const productsForComparison = await Promise.all(
+                selectedForComparison.map(async (asin) => {
+                    try {
+                        const productDetails = await fetchProductDetailsFromRainforest(asin);
+                        const mainTableProduct = data.find(item => item.asin === asin);
+                        if (mainTableProduct) {
+                            console.log(`Found main table product for ASIN ${asin}:`, mainTableProduct);
+                            return {
+                                ...productDetails,
+                                sales: mainTableProduct.sales,
+                                revenue: mainTableProduct.revenue,
+                                price: mainTableProduct.price
+                            };
+                        } else {
+                            return productDetails;
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching details for ASIN: ${asin}`, error);
+                        setErrorMessage(`Failed to fetch details for ASIN: ${asin}`);
+                        return null;
+                    }
+                })
+            );
+            console.log('Products for comparison:', productsForComparison);
+            setComparisonProducts(productsForComparison.filter(Boolean));
         } catch (error) {
-          console.error('Error fetching comparison products:', error);
-          setErrorMessage('Failed to fetch comparison products');
+            console.error('Error fetching comparison products:', error);
+            setErrorMessage('Failed to fetch comparison products');
         } finally {
-          setLoading(false);
+            setLoading(false);
         }
-      }, [selectedForComparison, data]);
-      
-      
+    }, [selectedForComparison, data]);
 
     const handleCompare = useCallback(() => {
         fetchComparisonProducts();
-        setActiveTab(4);  // Navigate to the Comparison tab
     }, [fetchComparisonProducts]);
 
     const handleCheckboxChange = useCallback((asin) => {
@@ -254,24 +216,6 @@ const MainComponent = () => {
         setOrderBy(property);
     }, [order, orderBy]);
 
-    const handleCSVUpload = useCallback((uploadedData) => {
-        console.log("MainComponent: CSV Upload - Received data", uploadedData.length, "items");
-        
-        const summary = updateSummary(uploadedData);
-        console.log("MainComponent: CSV Upload - Summary", summary);
-
-        setSummaryData(summary);
-        setData(uploadedData);
-        setResultsCount(uploadedData.length);
-        setQueriedKeywords([]);
-        setSelectedKeywords({});
-        setKeywordResults({});
-        
-        console.log("MainComponent: CSV Upload - State updates complete");
-        console.log("MainComponent: CSV Upload - Data state", uploadedData);
-        console.log("MainComponent: CSV Upload - Summary state", summary);
-    }, []);
-
     const memoizedPriceSegments = useMemo(() => 
         getPriceSegments(data, priceSegmentIncrement, summaryData),
         [data, priceSegmentIncrement, summaryData]
@@ -285,29 +229,6 @@ const MainComponent = () => {
 
     return (
         <Container>
-            <Box display="flex" alignItems="center" mb={2} sx={{ marginRight: 1, marginTop: 4 }}>
-                <TextField
-                    label="Enter keywords separated by commas"
-                    variant="outlined"
-                    fullWidth
-                    value={keywords}
-                    onChange={handleKeywordsChange}
-                    aria-label="Enter keywords"
-                />
-                <Button 
-                    variant="contained" 
-                    color="primary" 
-                    onClick={handleFetchData} 
-                    disabled={loading}
-                    aria-label="Fetch Data"
-                >
-                    {loading ? <CircularProgress size={24} /> : 'Fetch Data'}
-                </Button>
-                <CSVUpload 
-                    onDataUpload={handleCSVUpload}
-                    setLoading={setLoading}
-                />
-            </Box>
             {errorMessage && (
                 <Typography color="error" gutterBottom>
                     {errorMessage}
@@ -316,13 +237,6 @@ const MainComponent = () => {
             <Typography variant="subtitle1" gutterBottom>
                 Total Results: {resultsCount}
             </Typography>
-            <Tabs value={activeTab} onChange={handleTabChange} aria-label="Data view tabs">
-                <Tab label="All Results" id="tab-0" aria-controls="tabpanel-0" />
-                <Tab label="Price Segments" id="tab-1" aria-controls="tabpanel-1" />
-                <Tab label="Winners" id="tab-2" aria-controls="tabpanel-2" />
-                <Tab label="Insights" id="tab-3" aria-controls="tabpanel-3" />
-                <Tab label="Comparison" id="tab-4" aria-controls="tabpanel-4" />
-            </Tabs>
             <div role="tabpanel" hidden={activeTab !== 0} id="tabpanel-0" aria-labelledby="tab-0">
                 {activeTab === 0 && (
                     <DataTable
@@ -493,6 +407,11 @@ const MainComponent = () => {
             <div role="tabpanel" hidden={activeTab !== 4} id="tabpanel-4" aria-labelledby="tab-4">
                 {activeTab === 4 && (
                     loading ? <CircularProgress /> : <ProductComparison products={comparisonProducts} />
+                )}
+            </div>
+            <div role="tabpanel" hidden={activeTab !== 5} id="tabpanel-5" aria-labelledby="tab-5">
+                {activeTab === 5 && (
+                    <FeatureSegments data={data} />
                 )}
             </div>
         </Container>
