@@ -1,60 +1,36 @@
-export const processData = (csvData) => {
-    console.log('ProcessData - Input:', csvData);
+// Utility function for formatting numbers with commas
+export const formatNumberWithCommas = (number) => {
+    if (typeof number === 'number') {
+        return Math.round(number).toLocaleString('en-US');
+    }
+    return number;
+};
 
-    if (!Array.isArray(csvData) || csvData.length === 0) {
-        console.error('ProcessData - Invalid input: csvData is not an array or is empty');
+export const processData = (inputData) => {
+    console.log('ProcessData - Input:', inputData);
+
+    if (!Array.isArray(inputData) || inputData.length === 0) {
+        console.error('ProcessData - Invalid input: inputData is not an array or is empty');
         return [];
     }
 
-    const processedData = csvData.map((row, index) => {
-        if (typeof row !== 'object' || row === null) {
-            console.error(`ProcessData - Invalid row at index ${index}:`, row);
+    const isJungleScoutData = inputData[0] && 'attributes' in inputData[0];
+
+    const processedData = inputData.map((item, index) => {
+        if (typeof item !== 'object' || item === null) {
+            console.error(`ProcessData - Invalid item at index ${index}:`, item);
             return null;
         }
 
-        let sales = 0;
-        if (row['Sales'] && typeof row['Sales'] === 'string') {
-            sales = parseInt(row['Sales'].replace(/,/g, ''), 10);
-        } else if (typeof row['Sales'] === 'number') {
-            sales = row['Sales'];
+        if (isJungleScoutData) {
+            return processJungleScoutItem(item);
+        } else {
+            return processCSVItem(item);
         }
-
-        let revenue = 0;
-        if (row['Revenue'] && typeof row['Revenue'] === 'string') {
-            revenue = Math.round(parseFloat(row['Revenue'].replace(/[,$]/g, '')));
-        } else if (typeof row['Revenue'] === 'number') {
-            revenue = Math.round(row['Revenue']);
-        }
-
-        if (revenue > 0 && sales === 0) {
-            const price = parseFloat(row['Price  $']) || 0;
-            if (price > 0) {
-                sales = Math.round(revenue / price);
-            }
-        }
-
-        return {
-            asin: row['ASIN'] || '',
-            title: row['Product Details'] || '',
-            brand: row['Brand'] || '',
-            price: parseFloat(row['Price  $']) || 0,
-            reviews: parseInt(row['Review Count']) || 0,
-            rating: parseFloat(row['Ratings']) || 0,
-            sales: isNaN(sales) ? 0 : sales,
-            revenue: isNaN(revenue) ? 0 : revenue,
-            sellerCountry: row['Seller Country/Region'] || '',
-            fulfillment: row['Fulfillment'] || '',
-            dateFirstAvailable: row['Creation Date'] || '',
-            category: row['Category'] || '',
-            imageUrl: row['Image URL'] || '',
-            amazonUrl: row['URL'] || '',
-            attributes: row['Attributes'] || [],
-            featureBullets: row['Feature Bullets'] || []
-        };
     }).filter(item => item !== null);
 
     if (processedData.length === 0) {
-        console.error('ProcessData - All rows were invalid');
+        console.error('ProcessData - All items were invalid');
         return [];
     }
 
@@ -69,6 +45,70 @@ export const processData = (csvData) => {
 
     console.log('ProcessData - Output:', finalData);
     return finalData;
+};
+
+const processJungleScoutItem = (item) => {
+    const attributes = item.attributes;
+    return {
+        asin: item.id.replace('us/', ''),
+        title: attributes.title || '',
+        brand: attributes.brand || '',
+        price: parseFloat(attributes.price || 0),
+        reviews: parseInt(attributes.reviews || 0),
+        rating: parseFloat(attributes.rating || 0),
+        sales: parseInt(attributes.approximate_30_day_units_sold || 0),
+        revenue: Math.round(parseFloat(attributes.approximate_30_day_revenue || 0)),
+        sellerCountry: attributes.seller_country || '',
+        fulfillment: attributes.fulfillment || '',
+        dateFirstAvailable: attributes.date_first_available || '',
+        category: attributes.category || '',
+        imageUrl: attributes.image_url || '',
+        amazonUrl: `https://www.amazon.com/dp/${item.id.replace('us/', '')}`,
+        attributes: attributes.attributes || [],
+        featureBullets: attributes.feature_bullets || []
+    };
+};
+
+const processCSVItem = (row) => {
+    let sales = 0;
+    if (row['Sales'] && typeof row['Sales'] === 'string') {
+        sales = parseInt(row['Sales'].replace(/,/g, ''), 10);
+    } else if (typeof row['Sales'] === 'number') {
+        sales = row['Sales'];
+    }
+
+    let revenue = 0;
+    if (row['Revenue'] && typeof row['Revenue'] === 'string') {
+        revenue = Math.round(parseFloat(row['Revenue'].replace(/[,$]/g, '')));
+    } else if (typeof row['Revenue'] === 'number') {
+        revenue = Math.round(row['Revenue']);
+    }
+
+    if (revenue > 0 && sales === 0) {
+        const price = parseFloat(row['Price  $']) || 0;
+        if (price > 0) {
+            sales = Math.round(revenue / price);
+        }
+    }
+
+    return {
+        asin: row['ASIN'] || '',
+        title: row['Product Details'] || '',
+        brand: row['Brand'] || '',
+        price: parseFloat(row['Price  $']) || 0,
+        reviews: parseInt(row['Review Count']) || 0,
+        rating: parseFloat(row['Ratings']) || 0,
+        sales: isNaN(sales) ? 0 : sales,
+        revenue: isNaN(revenue) ? 0 : revenue,
+        sellerCountry: row['Seller Country/Region'] || '',
+        fulfillment: row['Fulfillment'] || '',
+        dateFirstAvailable: row['Creation Date'] || '',
+        category: row['Category'] || '',
+        imageUrl: row['Image URL'] || '',
+        amazonUrl: row['URL'] || '',
+        attributes: row['Attributes'] || [],
+        featureBullets: row['Feature Bullets'] || []
+    };
 };
 
 export const updateSummary = (data) => {
@@ -120,8 +160,8 @@ export const getPriceSegments = (data, increment, summaryData) => {
     const maxPrice = Math.max(...data.map(item => parseFloat(item.price) || 0));
     const segments = [];
 
-    const totalSalesValue = summaryData?.sales || 0;
-    const totalRevenueValue = summaryData?.revenue || 0;
+    const totalSalesValue = parseFloat(summaryData?.sales) || 0;
+    const totalRevenueValue = parseFloat(summaryData?.revenue) || 0;
 
     for (let i = 0; i <= maxPrice; i += increment) {
         const segmentItems = data.filter(item => {
@@ -133,29 +173,23 @@ export const getPriceSegments = (data, increment, summaryData) => {
 
         const totalSales = segmentItems.reduce((sum, item) => sum + (parseFloat(item.sales) || 0), 0);
         const totalRevenue = segmentItems.reduce((sum, item) => sum + (parseFloat(item.revenue) || 0), 0);
+        const totalReviews = segmentItems.reduce((sum, item) => sum + (parseInt(item.reviews) || 0), 0);
 
         const avgPrice = (segmentItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0) / segmentItems.length).toFixed(2);
 
         segments.push({
             title: `$${i} - $${i + increment}`,
             items: segmentItems,
-            price: `$${avgPrice}`,
-            reviews: segmentItems.reduce((sum, item) => sum + (parseInt(item.reviews) || 0), 0),
+            averagePrice: parseFloat(avgPrice),
+            reviews: totalReviews,
             sales: Math.round(totalSales),
             revenue: Math.round(totalRevenue),
-            percentOfTotalSales: totalSalesValue ? ((totalSales / totalSalesValue) * 100).toFixed(2) + '%' : '0%',
-            percentOfTotalRevenue: totalRevenueValue ? ((totalRevenue / totalRevenueValue) * 100).toFixed(2) + '%' : '0%',
+            percentOfTotalSales: totalSalesValue ? ((totalSales / totalSalesValue) * 100) : 0,
+            percentOfTotalRevenue: totalRevenueValue ? ((totalRevenue / totalRevenueValue) * 100) : 0,
             productCount: segmentItems.length
         });
     }
 
     console.log('GetPriceSegments - Output:', segments);
     return segments;
-};
-
-export const formatNumberWithCommas = (number) => {
-    if (typeof number === 'number') {
-        return Math.round(number).toLocaleString('en-US');
-    }
-    return number;
 };

@@ -33,7 +33,7 @@ module.exports = {
       "stream": require.resolve("stream-browserify"),
       "os": require.resolve("os-browserify/browser"),
       "crypto": require.resolve("crypto-browserify"),
-      "process": require.resolve("process/browser")
+      "process": require.resolve("process/browser.js") // Add .js extension here
     }
   },
   plugins: [
@@ -41,7 +41,7 @@ module.exports = {
       template: './public/index.html',
     }),
     new webpack.ProvidePlugin({
-      process: 'process/browser',
+      process: 'process/browser.js', // Add .js extension here
     }),
   ],
   devServer: {

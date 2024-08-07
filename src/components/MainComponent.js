@@ -1,16 +1,19 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import {
     Typography, Box, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-    Container, Checkbox, Slider, Collapse, IconButton, Link
+    Container, Checkbox, Slider, Collapse, IconButton, Link, Button
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { ExpandMore, ExpandLess, Delete } from '@mui/icons-material';
 import DataTable from './DataTable';
 import { ScatterPlot, PieCharts, TimelineChart } from './Charts';
 import ProductComparison from './ProductComparison';
-import { fetchTopKeywords, fetchDataForKeywords, fetchProductDetailsFromRainforest } from '../utils/api';
+import { fetchProductDetails, fetchSegmentedFeatures, updateSettings as apiUpdateSettings } from '../utils/api';
+import { fetchDataForKeywords } from '../utils/junglescout';
 import { updateSummary, getPriceSegments, processData, formatNumberWithCommas } from '../utils/dataProcessing';
 import FeatureSegments from './FeatureSegments';
+import Settings from './settings';
+import { AuthContext } from '../AuthContext';
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
     backgroundColor: theme.palette.common.black,
@@ -40,8 +43,14 @@ const marks = [
     { value: 50, label: '$50' },
 ];
 
+const MAX_CACHE_ENTRIES = 50;
+const MAX_CACHE_SIZE = 4 * 1024 * 1024; // 4MB
+const CACHE_EXPIRATION = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+
 const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) => {
+    const { settings, updateSettings } = useContext(AuthContext);
     const [data, setData] = useState([]);
+    const [allData, setAllData] = useState([]);
     const [summaryData, setSummaryData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [resultsCount, setResultsCount] = useState(0);
@@ -54,41 +63,165 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
     const [errorMessage, setErrorMessage] = useState('');
     const [order, setOrder] = useState('asc');
     const [orderBy, setOrderBy] = useState('');
+    const [currentSegment, setCurrentSegment] = useState(null);
+    const [featureSegments, setFeatureSegments] = useState(null);
 
-    const initialCache = JSON.parse(localStorage.getItem('keywordCache')) || {};
-    const [cache, setCache] = useState(initialCache);
+    const [cache, setCache] = useState(() => {
+        try {
+            const storedCache = JSON.parse(localStorage.getItem('keywordCache')) || {};
+            const now = Date.now();
+            // Filter out expired entries
+            const validCache = Object.entries(storedCache).reduce((acc, [key, value]) => {
+                if (now - value.timestamp < CACHE_EXPIRATION) {
+                    acc[key] = value;
+                }
+                return acc;
+            }, {});
+            return validCache;
+        } catch (error) {
+            console.error('Error parsing cache from localStorage:', error);
+            return {};
+        }
+    });
 
     useEffect(() => {
-        localStorage.setItem('keywordCache', JSON.stringify(cache));
+        const saveToCache = () => {
+            try {
+                const serializedCache = JSON.stringify(cache);
+                if (serializedCache.length <= MAX_CACHE_SIZE) {
+                    localStorage.setItem('keywordCache', serializedCache);
+                } else {
+                    console.warn('Cache size exceeds limit, not saving to localStorage');
+                }
+            } catch (error) {
+                console.error('Error saving cache to localStorage:', error);
+            }
+        };
+
+        saveToCache();
     }, [cache]);
+
+    const handleFeatureSegmentation = useCallback(async (dataToSegment) => {
+        try {
+            setLoading(true);
+            console.log("handleFeatureSegmentation - Data being sent for segmentation:", dataToSegment);
+            const segmentedFeatures = await fetchSegmentedFeatures(dataToSegment);
+            console.log("handleFeatureSegmentation - Segmented features received:", segmentedFeatures);
+
+            // Calculate total sales and revenue across all segments
+            const totalSalesAll = dataToSegment.reduce((sum, item) => sum + (item.sales || 0), 0);
+            const totalRevenueAll = dataToSegment.reduce((sum, item) => sum + (item.revenue || 0), 0);
+
+            // Fetch additional data for each ASIN in the segments
+            const enhancedSegments = await Promise.all(segmentedFeatures.segments.map(async (segment) => {
+                const enhancedProducts = await Promise.all(segment.products.map(async (product) => {
+                    const asinData = dataToSegment.find(item => item.asin === product.asin) || {};
+                    return {
+                        ...product,
+                        revenue: Math.round(asinData.revenue || 0),
+                        sales: asinData.sales || 0,
+                        price: asinData.price || 0,
+                        reviews: asinData.reviews || 0,
+                        rating: asinData.rating || 0,
+                        imageUrl: asinData.imageUrl || '',
+                        dateFirstAvailable: asinData.dateFirstAvailable || '',
+                        sellerType: asinData.sellerType || '',
+                        brand: asinData.brand || '',
+                        category: asinData.category || '',
+                        fulfillment: asinData.fulfillment || '',
+                        amazonUrl: asinData.amazonUrl || ''
+                    };
+                }));
+
+                // Calculate segment-level metrics
+                const totalRevenue = enhancedProducts.reduce((sum, product) => sum + product.revenue, 0);
+                const totalSales = enhancedProducts.reduce((sum, product) => sum + product.sales, 0);
+                const averagePrice = enhancedProducts.reduce((sum, product) => sum + product.price, 0) / enhancedProducts.length;
+                const totalReviews = enhancedProducts.reduce((sum, product) => sum + product.reviews, 0);
+
+                return {
+                    ...segment,
+                    products: enhancedProducts,
+                    totalRevenue,
+                    totalSales,
+                    averagePrice,
+                    totalReviews,
+                    averageReviews: totalReviews / enhancedProducts.length,
+                    percentOfTotalSales: (totalSales / totalSalesAll) * 100,
+                    percentOfTotalRevenue: (totalRevenue / totalRevenueAll) * 100
+                };
+            }));
+
+            setFeatureSegments({ ...segmentedFeatures, segments: enhancedSegments });
+        } catch (error) {
+            console.error("handleFeatureSegmentation - Error fetching segmented features:", error);
+            setErrorMessage("An error occurred while fetching segmented features. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
         if (uploadedData && uploadedData.length > 0) {
+            console.log("useEffect - Uploaded data received:", uploadedData);
             const summary = updateSummary(uploadedData);
             setSummaryData(summary);
-            setData(uploadedData);
+            setData([summary, ...uploadedData]);
+            setAllData(uploadedData);
             setResultsCount(uploadedData.length);
             setKeywordResults({});
+            setCurrentSegment(null);
+            
+            // Trigger feature segmentation
+            handleFeatureSegmentation(uploadedData);
         }
-    }, [uploadedData]);
+    }, [uploadedData, handleFeatureSegmentation]);
 
-    // Fetch data when the keywords prop changes
-    useEffect(() => {
-        if (keywords) {
-            handleFetchData();
+    const trimCache = (currentCache) => {
+        let trimmedCache = { ...currentCache };
+        const keys = Object.keys(trimmedCache);
+        const now = Date.now();
+        
+        // Remove expired entries
+        keys.forEach(key => {
+            if (now - trimmedCache[key].timestamp > CACHE_EXPIRATION) {
+                delete trimmedCache[key];
+            }
+        });
+        
+        // Remove oldest entries if we exceed MAX_CACHE_ENTRIES
+        while (Object.keys(trimmedCache).length > MAX_CACHE_ENTRIES) {
+            const oldestKey = Object.keys(trimmedCache).reduce((a, b) => 
+                trimmedCache[a].timestamp < trimmedCache[b].timestamp ? a : b
+            );
+            delete trimmedCache[oldestKey];
         }
-    }, [keywords]);
+        
+        // Check size and remove entries if we're still over MAX_CACHE_SIZE
+        let serializedSize = JSON.stringify(trimmedCache).length;
+        while (serializedSize > MAX_CACHE_SIZE && Object.keys(trimmedCache).length > 0) {
+            const oldestKey = Object.keys(trimmedCache).reduce((a, b) => 
+                trimmedCache[a].timestamp < trimmedCache[b].timestamp ? a : b
+            );
+            delete trimmedCache[oldestKey];
+            serializedSize = JSON.stringify(trimmedCache).length;
+        }
+        
+        return trimmedCache;
+    };
 
-    const handleFetchData = async () => {
+    const handleFetchData = useCallback(async () => {
         setLoading(true);
         setData([]);
         setKeywordResults({});
         setErrorMessage('');
+        setCurrentSegment(null);
         console.log('Fetching data for keywords:', keywords);
 
-        if (cache[keywords]) {
+        if (cache[keywords] && Date.now() - cache[keywords].timestamp < CACHE_EXPIRATION) {
             const cachedData = cache[keywords];
             setData(cachedData.data || []);
+            setAllData(cachedData.data.filter(item => item.asin !== 'Summary') || []);
             setSummaryData(cachedData.summaryData || null);
             setResultsCount(cachedData.resultsCount || 0);
             setKeywordResults(cachedData.keywordResults || {});
@@ -97,44 +230,45 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
         }
 
         try {
-            const topKeywords = await fetchTopKeywords(keywords.split(',').map(keyword => keyword.trim())); // Ensure keywords are split into an array
-            const uniqueTopKeywords = Array.from(new Set([keywords, ...topKeywords.filter(k => k.toLowerCase() !== keywords.toLowerCase())]));
+            const keywordList = keywords.split(',').map(keyword => keyword.trim());
+            const allResults = await fetchDataForKeywords(keywordList);
 
-            const allResults = await fetchDataForKeywords(uniqueTopKeywords);
-            const totalResults = allResults.flat();
-            const uniqueResults = Array.from(new Set(totalResults.map(item => item.asin)))
-                .map(asin => totalResults.find(item => item.asin === asin));
-
-            const processedResults = processData(uniqueResults);
+            const processedResults = processData(allResults);
             const summary = updateSummary(processedResults);
 
             setSummaryData(summary);
             setData([summary, ...processedResults]);
+            setAllData(processedResults);
             setResultsCount(processedResults.length);
 
-            const keywordResults = uniqueTopKeywords.reduce((acc, keyword, index) => {
-                acc[keyword] = allResults[index];
-                return acc;
-            }, {});
-
-            setKeywordResults(keywordResults);
-
-            setCache(prevCache => ({
-                ...prevCache,
+            const updatedCache = trimCache({
+                ...cache,
                 [keywords]: {
                     data: [summary, ...processedResults],
                     summaryData: summary,
                     resultsCount: processedResults.length,
-                    keywordResults: keywordResults,
+                    keywordResults: processedResults,
+                    timestamp: Date.now()
                 }
-            }));
+            });
+
+            setCache(updatedCache);
+
+            // Trigger feature segmentation for the new data
+            handleFeatureSegmentation(processedResults);
         } catch (error) {
             console.error("Error fetching data:", error);
             setErrorMessage("An error occurred while fetching data. Please try again.");
+        } finally {
+            setLoading(false);
         }
+    }, [keywords, cache, handleFeatureSegmentation]);
 
-        setLoading(false);
-    };
+    useEffect(() => {
+        if (keywords) {
+            handleFetchData();
+        }
+    }, [keywords, handleFetchData]);
 
     const handleSegmentToggle = useCallback((segment) => {
         setExpandedSegments(prev => ({ ...prev, [segment]: !prev[segment] }));
@@ -143,8 +277,10 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
     const handleDeleteRow = useCallback((asin) => {
         setData(prevData => {
             const updatedData = prevData.filter(item => item.asin !== asin);
-            return updateSummary(updatedData);
+            const newSummary = updateSummary(updatedData.filter(item => item.asin !== 'Summary'));
+            return [newSummary, ...updatedData.filter(item => item.asin !== 'Summary')];
         });
+        setAllData(prevData => prevData.filter(item => item.asin !== asin));
     }, []);
 
     const fetchWinningProducts = useCallback(() => {
@@ -152,7 +288,7 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
             console.error('Invalid input: data is not an array or is empty');
             return;
         }
-        const priceSegments = getPriceSegments(data, priceSegmentIncrement, summaryData);
+        const priceSegments = getPriceSegments(data.filter(item => item.asin !== 'Summary'), priceSegmentIncrement, summaryData);
         const winners = priceSegments.map(segment => {
             const sortedItems = segment.items.sort((a, b) => b.sales - a.sales);
             return sortedItems[0]; // Return the item with the highest sales
@@ -166,7 +302,7 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
             const productsForComparison = await Promise.all(
                 selectedForComparison.map(async (asin) => {
                     try {
-                        const productDetails = await fetchProductDetailsFromRainforest(asin);
+                        const productDetails = await fetchProductDetails(asin);
                         const mainTableProduct = data.find(item => item.asin === asin);
                         if (mainTableProduct) {
                             console.log(`Found main table product for ASIN ${asin}:`, mainTableProduct);
@@ -216,10 +352,37 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
         setOrderBy(property);
     }, [order, orderBy]);
 
-    const memoizedPriceSegments = useMemo(() => 
-        getPriceSegments(data, priceSegmentIncrement, summaryData),
-        [data, priceSegmentIncrement, summaryData]
-    );
+    const handleSegmentSelect = useCallback((segmentProducts, segmentName) => {
+        const segmentData = segmentProducts.map(product => ({
+            ...product,
+            price: parseFloat(product.price) || 0,
+            sales: parseInt(product.sales) || 0,
+            revenue: parseFloat(product.revenue) || 0,
+            reviews: parseInt(product.reviews) || 0
+        }));
+        const summary = updateSummary(segmentData);
+        setData([summary, ...segmentData]);
+        setSummaryData(summary);
+        setCurrentSegment(segmentName);
+        setResultsCount(segmentData.length);
+        handleTabChange(null, 0); // Switch to the main table tab
+    }, [handleTabChange]);
+
+    const handleResetToAllData = useCallback(() => {
+        const summary = updateSummary(allData);
+        setData([summary, ...allData]);
+        setSummaryData(summary);
+        setCurrentSegment(null);
+        setResultsCount(allData.length);
+    }, [allData]);
+
+    const memoizedPriceSegments = useMemo(() => {
+        if (!Array.isArray(data) || data.length === 0) {
+            return [];
+        }
+        const validData = data.filter(item => item.asin !== 'Summary' && item.price && item.sales);
+        return getPriceSegments(validData, priceSegmentIncrement, summaryData);
+    }, [data, priceSegmentIncrement, summaryData]);
 
     useEffect(() => {
         if (activeTab === 2) {
@@ -227,8 +390,28 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
         }
     }, [activeTab, fetchWinningProducts]);
 
+    const pageTitle = useMemo(() => {
+        if (currentSegment) {
+            return `Segment: ${currentSegment}`;
+        } else if (keywords) {
+            return `Keyword: ${keywords}`;
+        }
+        return 'Product Analysis';
+    }, [currentSegment, keywords]);
+
+    const handleSettingsSave = useCallback((newSettings) => {
+        updateSettings(newSettings); // Update the context
+        apiUpdateSettings(newSettings); // Update the API settings
+    }, [updateSettings]);
+
     return (
         <Container>
+            <Typography variant="h4" gutterBottom>{pageTitle}</Typography>
+            {currentSegment && (
+                <Button variant="outlined" onClick={handleResetToAllData} style={{ marginBottom: '1rem' }}>
+                    Reset to All Data
+                </Button>
+            )}
             {errorMessage && (
                 <Typography color="error" gutterBottom>
                     {errorMessage}
@@ -273,7 +456,7 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
                         <TableContainer component={Paper}>
                             <Table size="small" aria-label="price segments table">
                                 <TableHead>
-                                    <StyledTableRow>
+                                    <TableRow>
                                         <StyledTableCell>Segment</StyledTableCell>
                                         <StyledTableCell>Average Price</StyledTableCell>
                                         <StyledTableCell>Number of Products</StyledTableCell>
@@ -283,19 +466,20 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
                                         <StyledTableCell>% of Total Sales</StyledTableCell>
                                         <StyledTableCell>% of Total Revenue</StyledTableCell>
                                         <StyledTableCell>Actions</StyledTableCell>
-                                    </StyledTableRow>
+                                    </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                    {memoizedPriceSegments.map((segment, index) => (<React.Fragment key={index}>
+                                    {memoizedPriceSegments.map((segment, index) => (
+                                        <React.Fragment key={index}>
                                             <StyledTableRow>
                                                 <TableCell>{segment.title}</TableCell>
-                                                <TableCell>{segment.price}</TableCell>
-                                                <TableCell>{segment.productCount}</TableCell>
-                                                <TableCell>{formatNumberWithCommas(segment.reviews)}</TableCell>
-                                                <TableCell>{formatNumberWithCommas(segment.sales)}</TableCell>
-                                                <TableCell>${formatNumberWithCommas(segment.revenue)}</TableCell>
-                                                <TableCell>{segment.percentOfTotalSales}</TableCell>
-                                                <TableCell>{segment.percentOfTotalRevenue}</TableCell>
+                                                <TableCell>${formatNumberWithCommas(segment.averagePrice ? segment.averagePrice.toFixed(2) : 0)}</TableCell>
+                                                <TableCell>{segment.productCount || 0}</TableCell>
+                                                <TableCell>{formatNumberWithCommas(segment.reviews || 0)}</TableCell>
+                                                <TableCell>{formatNumberWithCommas(segment.sales || 0)}</TableCell>
+                                                <TableCell>${formatNumberWithCommas(segment.revenue ? segment.revenue.toFixed(2) : 0)}</TableCell>
+                                                <TableCell>{segment.percentOfTotalSales !== undefined ? segment.percentOfTotalSales.toFixed(2) : '0.00'}%</TableCell>
+                                                <TableCell>{segment.percentOfTotalRevenue !== undefined ? segment.percentOfTotalRevenue.toFixed(2) : '0.00'}%</TableCell>
                                                 <TableCell>
                                                     <IconButton 
                                                         size="small" 
@@ -339,10 +523,10 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
                                                                                 </Link>
                                                                             </TableCell>
                                                                             <TableCell>{item.title}</TableCell>
-                                                                            <TableCell>${formatNumberWithCommas(item.price)}</TableCell>
-                                                                            <TableCell>{formatNumberWithCommas(item.reviews)}</TableCell>
-                                                                            <TableCell>{formatNumberWithCommas(item.sales)}</TableCell>
-                                                                            <TableCell>${formatNumberWithCommas(item.revenue)}</TableCell>
+                                                                            <TableCell>${formatNumberWithCommas(item.price ? item.price.toFixed(2) : 0)}</TableCell>
+                                                                            <TableCell>{formatNumberWithCommas(item.reviews || 0)}</TableCell>
+                                                                            <TableCell>{formatNumberWithCommas(item.sales || 0)}</TableCell>
+                                                                            <TableCell>${formatNumberWithCommas(item.revenue ? item.revenue.toFixed(2) : 0)}</TableCell>
                                                                             <TableCell>
                                                                                 <IconButton 
                                                                                     size="small" 
@@ -411,9 +595,21 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords }) =
             </div>
             <div role="tabpanel" hidden={activeTab !== 5} id="tabpanel-5" aria-labelledby="tab-5">
                 {activeTab === 5 && (
-                    <FeatureSegments data={data} />
+                    <>
+                        <Typography variant="body2">Debug Info: Has segments: {featureSegments ? 'Yes' : 'No'}</Typography>
+                        <FeatureSegments 
+                            data={allData} 
+                            onSegmentSelect={handleSegmentSelect}
+                            currentKeyword={keywords}
+                            segments={featureSegments}
+                            loading={loading}
+                        />
+                    </>
                 )}
             </div>
+            {activeTab === 6 && (
+                <Settings onSave={handleSettingsSave} initialSettings={settings} />
+            )}
         </Container>
     );
 };

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+// src/Layout.js
+import React, { useContext, useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { AuthContext } from './AuthContext';
 import {
-    Container, Box, Typography, IconButton, AppBar, Toolbar, Drawer, List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem, TextField, CssBaseline
+    Container, Box, Typography, IconButton, AppBar, Toolbar, Drawer, List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem, TextField, CssBaseline, Button
 } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
@@ -9,38 +11,30 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import SearchIcon from '@mui/icons-material/Search';
 import CSVUpload from './components/CSVUpload';
-import Login from './components/login';
 import MainComponent from './components/MainComponent';
 import CalculatorComponent from './components/CalculatorComponent';
+import Login from './components/Login';
+import SignUp from './components/SignUp';
+import Settings from './components/settings';
 
 const Layout = () => {
     const [darkMode, setDarkMode] = useState(false);
-    const [loggedIn, setLoggedIn] = useState(false);
     const [anchorEl, setAnchorEl] = useState(null);
     const navigate = useNavigate();
+    const location = useLocation();
     const [uploadedData, setUploadedData] = useState([]);
     const [activeTab, setActiveTab] = useState(0);
     const [searchKeywords, setSearchKeywords] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const { isAuthenticated, logout, settings, updateSettings } = useContext(AuthContext);
 
     useEffect(() => {
-        const sessionToken = localStorage.getItem('sessionToken');
-        if (sessionToken) {
-            setLoggedIn(true);
-        }
-    }, []);
+        console.log('Current path:', location.pathname);
+        console.log('Is authenticated:', isAuthenticated);
+    }, [location.pathname, isAuthenticated]);
 
     const handleThemeToggle = () => {
         setDarkMode(!darkMode);
-    };
-
-    const handleLogin = () => {
-        setLoggedIn(true);
-    };
-
-    const handleLogout = () => {
-        localStorage.removeItem('sessionToken');
-        setLoggedIn(false);
-        setAnchorEl(null);
     };
 
     const handleMenu = (event) => {
@@ -71,17 +65,17 @@ const Layout = () => {
 
     const handleSearch = () => {
         console.log('Searching for:', searchKeywords);
-        // Pass the searchKeywords to MainComponent to fetch data
+        setSearchQuery(searchKeywords);
     };
 
     const theme = createTheme({
         palette: {
             mode: darkMode ? 'dark' : 'light',
             primary: {
-                main: '#3f51b5',
+                main: '#04724D',
             },
             secondary: {
-                main: '#f50057',
+                main: '#8DB38B',
             },
             background: {
                 default: darkMode ? '#303030' : '#f5f5f5',
@@ -108,10 +102,10 @@ const Layout = () => {
                         },
                     },
                     containedPrimary: {
-                        background: 'linear-gradient(45deg, #3f51b5 30%, #5c6bc0 90%)',
+                        background: 'linear-gradient(45deg, #5acf4e 30%, #5acf4e 90%)',
                     },
                     containedSecondary: {
-                        background: 'linear-gradient(45deg, #f50057 30%, #ff4081 90%)',
+                        background: 'linear-gradient(45deg, #5acf4e 30%, #5acf4e 90%)',
                     },
                 },
             },
@@ -175,9 +169,15 @@ const Layout = () => {
                             onChange={(e) => setSearchKeywords(e.target.value)}
                             sx={{ mr: 2, background: 'white', borderRadius: 1 }}
                         />
-                        <IconButton color="primary" onClick={handleSearch}>
-                            <SearchIcon style={{ color: 'white' }} />
-                        </IconButton>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={handleSearch}
+                            startIcon={<SearchIcon />}
+                            sx={{ mr: 2 }}
+                        >
+                            Search
+                        </Button>
                         <CSVUpload
                             onDataUpload={handleCSVUpload}
                             setLoading={() => {}}
@@ -186,7 +186,7 @@ const Layout = () => {
                         <IconButton onClick={handleThemeToggle} color="inherit" sx={{ ml: 1 }}>
                             {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
                         </IconButton>
-                        {loggedIn && (
+                        {isAuthenticated && (
                             <div>
                                 <IconButton
                                     aria-controls="account-menu"
@@ -203,13 +203,15 @@ const Layout = () => {
                                     onClose={handleClose}
                                     keepMounted
                                 >
-                                    <MenuItem onClick={handleLogout}>Logout</MenuItem>
+                                    <MenuItem onClick={() => navigate('/account-history')}>Account History</MenuItem>
+                                    <MenuItem onClick={() => navigate('/settings')}>Settings</MenuItem>
+                                    <MenuItem onClick={logout}>Logout</MenuItem>
                                 </Menu>
                             </div>
                         )}
                     </Toolbar>
                 </AppBar>
-                {loggedIn && (
+                {isAuthenticated && (
                     <Drawer
                         variant="permanent"
                         sx={{
@@ -239,19 +241,30 @@ const Layout = () => {
                 )}
                 <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8 }}>
                     <Container>
-                        {!loggedIn ? (
-                            <Login onLogin={handleLogin} />
+                        {!isAuthenticated ? (
+                            <>
+                                {console.log('Rendering unauthenticated content')}
+                                {location.pathname === '/signup' ? (
+                                    <SignUp />
+                                ) : (
+                                    <Login />
+                                )}
+                            </>
                         ) : (
-                            activeTab === 6 ? (
-                                <CalculatorComponent />
-                            ) : (
-                                <MainComponent
-                                    uploadedData={uploadedData}
-                                    activeTab={activeTab}
-                                    handleTabChange={handleTabChange}
-                                    keywords={searchKeywords} // Pass keywords to MainComponent
-                                />
-                            )
+                            <>
+                                {location.pathname === '/settings' ? (
+                                    <Settings onSave={updateSettings} initialSettings={settings} />
+                                ) : activeTab === 6 ? (
+                                    <CalculatorComponent />
+                                ) : (
+                                    <MainComponent
+                                        uploadedData={uploadedData}
+                                        activeTab={activeTab}
+                                        handleTabChange={handleTabChange}
+                                        keywords={searchQuery}
+                                    />
+                                )}
+                            </>
                         )}
                     </Container>
                 </Box>

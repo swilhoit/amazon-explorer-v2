@@ -1,6 +1,7 @@
 const webpack = require('webpack');
 
 module.exports = function override(config, env) {
+  // Add fallbacks for node core modules
   config.resolve.fallback = {
     ...config.resolve.fallback,
     stream: require.resolve("stream-browserify"),
@@ -8,34 +9,26 @@ module.exports = function override(config, env) {
     os: require.resolve("os-browserify/browser"),
     path: require.resolve("path-browserify"),
     fs: false,
-    process: require.resolve("process/browser"),
-    buffer: require.resolve("buffer")
+    buffer: require.resolve("buffer"),
+    process: require.resolve("process/browser.js"),  // Note the .js extension
   };
   
-  config.plugins = [
-    ...config.plugins,
+  // Add ProvidePlugin
+  config.plugins.push(
     new webpack.ProvidePlugin({
-      process: "process/browser",
+      process: "process/browser.js",  // Note the .js extension
       Buffer: ["buffer", "Buffer"],
-    }),
-  ];
+    })
+  );
 
   // Add resolver for .mjs files
   config.resolve.extensions.push('.mjs');
 
-  // Add specific rule for groq-sdk
+  // Add specific rule for axios
   config.module.rules.push({
-    test: /\.mjs$/,
-    include: /node_modules\/groq-sdk/,
-    type: "javascript/auto",
-    use: {
-      loader: 'babel-loader',
-      options: {
-        presets: ['@babel/preset-env'],
-        plugins: [
-          ['@babel/plugin-transform-modules-commonjs', { strictMode: false }]
-        ]
-      }
+    test: /\.m?js/,
+    resolve: {
+      fullySpecified: false
     }
   });
 

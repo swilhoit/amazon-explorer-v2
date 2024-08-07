@@ -35,7 +35,7 @@ const TwoLineEllipsis = styled('div')({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     lineHeight: '1.2em',
-    maxHeight: '2.4em', // 2 lines * 1.2em line-height
+    maxHeight: '2.4em',
     wordBreak: 'break-word',
 });
 
@@ -61,18 +61,15 @@ const DataTable = ({
             let aValue = a[orderBy];
             let bValue = b[orderBy];
 
-            // Convert to numbers for numeric fields
             if (['price', 'reviews', 'sales', 'revenue', 'percentOfTotalSales', 'percentOfTotalRevenue'].includes(orderBy)) {
                 aValue = parseFloat(aValue) || 0;
                 bValue = parseFloat(bValue) || 0;
             }
 
-            // Handle string comparisons
             if (typeof aValue === 'string' && typeof bValue === 'string') {
                 return order === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
             }
 
-            // Handle number comparisons
             if (aValue < bValue) return order === 'asc' ? -1 : 1;
             if (aValue > bValue) return order === 'asc' ? 1 : -1;
             return 0;
@@ -88,6 +85,16 @@ const DataTable = ({
     if (!data || !Array.isArray(data) || data.length === 0) {
         return <Typography>No data available</Typography>;
     }
+
+    const formatValue = (value, isPrice = false) => {
+        if (value === undefined || value === null) return 'N/A';
+        if (typeof value === 'number') {
+            return isPrice 
+                ? `$${formatNumberWithCommas(value.toFixed(2))}` 
+                : formatNumberWithCommas(value);
+        }
+        return value.toString();
+    };
 
     return (
         <TableContainer component={Paper}>
@@ -179,7 +186,7 @@ const DataTable = ({
                         </StyledTableCell>
                         <StyledTableCell>Actions</StyledTableCell>
                     </TableRow>
-                </TableHead>
+                    </TableHead>
                 <TableBody>
                     {summaryData && (
                         <StyledTableRow>
@@ -195,19 +202,19 @@ const DataTable = ({
                                 </Button>
                             </StyledTableCell>
                             <StyledTableCell>-</StyledTableCell>
-                            <StyledTableCell>-</StyledTableCell>
-                            <StyledTableCell>{summaryData.price || 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{formatNumberWithCommas(summaryData.reviews) || 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{formatNumberWithCommas(summaryData.sales) || 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{summaryData.percentOfTotalSales ? `${summaryData.percentOfTotalSales}%` : 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{summaryData.revenue ? `$${formatNumberWithCommas(summaryData.revenue)}` : 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{summaryData.percentOfTotalRevenue ? `${summaryData.percentOfTotalRevenue}%` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>Summary</StyledTableCell>
+                            <StyledTableCell>{formatValue(summaryData.price, true)}</StyledTableCell>
+                            <StyledTableCell>{formatValue(summaryData.reviews)}</StyledTableCell>
+                            <StyledTableCell>{formatValue(summaryData.sales)}</StyledTableCell>
+                            <StyledTableCell>{typeof summaryData.percentOfTotalSales === 'number' ? `${summaryData.percentOfTotalSales.toFixed(2)}%` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{formatValue(summaryData.revenue, true)}</StyledTableCell>
+                            <StyledTableCell>{typeof summaryData.percentOfTotalRevenue === 'number' ? `${summaryData.percentOfTotalRevenue.toFixed(2)}%` : 'N/A'}</StyledTableCell>
                             <StyledTableCell>-</StyledTableCell>
                             <StyledTableCell>Summary</StyledTableCell>
                             <StyledTableCell>-</StyledTableCell>
                         </StyledTableRow>
                     )}
-                    {sortedData.map((product, index) => (
+                    {sortedData.filter(product => product.asin !== 'Summary').map((product, index) => (
                         <StyledTableRow key={product.asin || index}>
                             <StyledTableCell>
                                 <Checkbox
@@ -229,12 +236,12 @@ const DataTable = ({
                                     </TwoLineEllipsis>
                                 </Link>
                             </StyledTableCell>
-                            <StyledTableCell>{product.price ? `$${formatNumberWithCommas(product.price)}` : 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{formatNumberWithCommas(product.reviews) || 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{formatNumberWithCommas(product.sales) || 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{product.percentOfTotalSales ? `${product.percentOfTotalSales}%` : 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{product.revenue ? `$${formatNumberWithCommas(product.revenue)}` : 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{product.percentOfTotalRevenue ? `${product.percentOfTotalRevenue}%` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{formatValue(product.price, true)}</StyledTableCell>
+                            <StyledTableCell>{formatValue(product.reviews)}</StyledTableCell>
+                            <StyledTableCell>{formatValue(product.sales)}</StyledTableCell>
+                            <StyledTableCell>{product.percentOfTotalSales ? `${parseFloat(product.percentOfTotalSales).toFixed(2)}%` : 'N/A'}</StyledTableCell>
+                            <StyledTableCell>{formatValue(product.revenue, true)}</StyledTableCell>
+                            <StyledTableCell>{product.percentOfTotalRevenue ? `${parseFloat(product.percentOfTotalRevenue).toFixed(2)}%` : 'N/A'}</StyledTableCell>
                             <StyledTableCell>{product.brand || 'N/A'}</StyledTableCell>
                             <StyledTableCell>{product.asin || 'N/A'}</StyledTableCell>
                             <StyledTableCell>

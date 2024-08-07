@@ -1,142 +1,290 @@
-import React, { useEffect, useState } from 'react';
-import { fetchSegmentedFeatures } from '../utils/api';
-import { Box, Typography, CircularProgress, Card, CardContent, Accordion, AccordionSummary, AccordionDetails, Alert, List, ListItem, ListItemText, Chip } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  Box, Typography, CircularProgress, Grid, Paper, Switch, 
+  FormControlLabel, Table, TableBody, TableCell, TableContainer, 
+  TableHead, TableRow, TableSortLabel, Button, Collapse, IconButton
+} from '@mui/material';
+import { styled } from '@mui/material/styles';
+import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
 
-const segmentWorker = new Worker(new URL('./segmentWorker.js', import.meta.url));
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  backgroundColor: theme.palette.common.black,
+  color: theme.palette.common.white,
+  fontWeight: 'bold',
+}));
 
-const FeatureSegments = ({ data }) => {
-  const [segments, setSegments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [warning, setWarning] = useState(null);
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  '&:nth-of-type(odd)': {
+    backgroundColor: theme.palette.action.hover,
+  },
+  '&:hover': {
+    backgroundColor: theme.palette.action.selected,
+  },
+}));
 
-  useEffect(() => {
-    const fetchAndProcessSegments = async () => {
-      try {
-        const titles = data.filter(item => item && item.title).map(item => item.title);
-        if (titles.length === 0) {
-          throw new Error('No valid titles to fetch');
+const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, loading }) => {
+    const [viewMode, setViewMode] = useState('table');
+    const [orderBy, setOrderBy] = useState('totalRevenue');
+    const [order, setOrder] = useState('desc');
+    const [expandedSegment, setExpandedSegment] = useState(null);
+
+    useEffect(() => {
+        console.log("Received segments data:", JSON.stringify(segments, null, 2));
+    }, [segments]);
+
+    const sortedSegments = useMemo(() => {
+        console.log("sortedSegments - Starting sorting");
+        if (!segments || !Array.isArray(segments.segments)) {
+            console.warn("sortedSegments - Invalid segments data:", segments);
+            return [];
         }
 
-        const response = await fetchSegmentedFeatures(titles);
-        if (!response || !response.products || response.products.length === 0) {
-          throw new Error('No products returned from fetchSegmentedFeatures');
-        }
-
-        const allProducts = response.products;
-        
-        const processPromise = new Promise((resolve, reject) => {
-          segmentWorker.postMessage({ data, products: allProducts });
-          segmentWorker.onmessage = (event) => {
-            if (event.data.error) {
-              reject(new Error(event.data.error));
-            } else if (event.data.warning) {
-              setWarning(event.data.warning);
-              resolve([]);
-            } else {
-              resolve(event.data);
+        return [...segments.segments].sort((a, b) => {
+            if (orderBy === 'products.length') {
+                return order === 'asc' ? a.products.length - b.products.length : b.products.length - a.products.length;
             }
-          };
-          segmentWorker.onerror = (error) => {
-            console.error('Error in worker:', error);
-            reject(error);
-          };
+            if (b[orderBy] < a[orderBy]) {
+                return order === 'asc' ? 1 : -1;
+            }
+            if (b[orderBy] > a[orderBy]) {
+                return order === 'asc' ? -1 : 1;
+            }
+            return 0;
         });
+    }, [segments, order, orderBy]);
 
-        const processedSegments = await processPromise;
-        setSegments(processedSegments);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error in fetchAndProcessSegments:', error);
-        setError(`Failed to fetch or process segmented features: ${error.message}`);
-        setLoading(false);
-      }
+    const handleSort = (property) => {
+        const isAsc = orderBy === property && order === 'asc';
+        setOrder(isAsc ? 'desc' : 'asc');
+        setOrderBy(property);
     };
 
-    fetchAndProcessSegments();
+    const formatPrice = (price) => {
+        return price > 0 ? `$${price.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}` : 'N/A';
+    };
 
-    return () => segmentWorker.terminate();
-  }, [data]);
+    const formatNumber = (number) => {
+        return number > 0 ? number.toLocaleString() : '0';
+    };
 
-  const renderFeatures = (features) => (
-    <Box component="div">
-      <Typography variant="body2" component="div">Features:</Typography>
-      <List dense>
-        {features.map((feature, index) => (
-          <ListItem key={index}>
-            <ListItemText primary={feature} />
-          </ListItem>
-        ))}
-      </List>
-    </Box>
-  );
+    const formatPercent = (percent) => {
+        return percent > 0 ? `${percent.toFixed(2)}%` : '0.00%';
+    };
 
-  const renderAttributes = (attributes) => (
-    <Box component="div">
-      <Typography variant="body2" component="div">Attributes:</Typography>
-      <List dense>
-        {attributes.map((attr, index) => (
-          <ListItem key={index}>
-            <ListItemText primary={`${attr.name}: ${attr.value}`} />
-          </ListItem>
-        ))}
-      </List>
-    </Box>
-  );
+    const handleExpandClick = (segmentName) => {
+        setExpandedSegment(expandedSegment === segmentName ? null : segmentName);
+    };
 
-  return (
-    <Box>
-      {loading ? (
-        <CircularProgress />
-      ) : error ? (
-        <Typography color="error">{error}</Typography>
-      ) : warning ? (
-        <Alert severity="warning">{warning}</Alert>
-      ) : segments.length === 0 ? (
-        <Typography>No segments available</Typography>
-      ) : (
-        <>
-          {segments.map((segment, index) => (
-            <Accordion key={index}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Box display="flex" alignItems="center" width="100%">
-                  <Typography variant="h6" style={{ flexGrow: 1 }}>{segment.segment_name}</Typography>
-                  <Typography variant="body2" style={{ marginRight: '10px' }}>
-                    Total Revenue: ${segment.totalRevenue.toFixed(2)} | 
-                    Avg Price: ${segment.averagePrice.toFixed(2)} | 
-                    % of Total: {segment.percentOfTotalRevenue.toFixed(2)}%
-                  </Typography>
-                  <Chip label={`${segment.products.length} products`} />
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Card>
-                  <CardContent>
-                    <List>
-                      {segment.products.map((product, productIndex) => (
-                        <ListItem key={productIndex}>
-                          <Box>
-                            <Typography variant="subtitle1">{`Product ${productIndex + 1}`}</Typography>
-                            {product.features.length > 0 && renderFeatures(product.features)}
-                            {product.attributes.length > 0 && renderAttributes(product.attributes)}
-                            <Typography variant="body2" component="div">
-                              Sales: {product.sales !== undefined ? product.sales : 'N/A'}, 
-                              Revenue: {product.revenue !== undefined ? `$${product.revenue}` : 'N/A'}
-                            </Typography>
-                          </Box>
-                        </ListItem>
-                      ))}
-                    </List>
-                  </CardContent>
-                </Card>
-              </AccordionDetails>
-            </Accordion>
-          ))}
-        </>
-      )}
-    </Box>
-  );
+    const renderTableView = () => {
+        if (sortedSegments.length === 0) {
+            return <Typography>No segments data available</Typography>;
+        }
+
+        return (
+            <TableContainer component={Paper}>
+                <Table size="small">
+                    <TableHead>
+                        <TableRow>
+                            <StyledTableCell />
+                            <StyledTableCell>Segment</StyledTableCell>
+                            <StyledTableCell align="right">
+                                <TableSortLabel
+                                    active={orderBy === 'products.length'}
+                                    direction={orderBy === 'products.length' ? order : 'asc'}
+                                    onClick={() => handleSort('products.length')}
+                                >
+                                    Products
+                                </TableSortLabel>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                                <TableSortLabel
+                                    active={orderBy === 'averagePrice'}
+                                    direction={orderBy === 'averagePrice' ? order : 'asc'}
+                                    onClick={() => handleSort('averagePrice')}
+                                >
+                                    Avg Price
+                                </TableSortLabel>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                                <TableSortLabel
+                                    active={orderBy === 'totalSales'}
+                                    direction={orderBy === 'totalSales' ? order : 'asc'}
+                                    onClick={() => handleSort('totalSales')}
+                                >
+                                    Total Sales
+                                </TableSortLabel>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                                <TableSortLabel
+                                    active={orderBy === 'percentOfTotalSales'}
+                                    direction={orderBy === 'percentOfTotalSales' ? order : 'asc'}
+                                    onClick={() => handleSort('percentOfTotalSales')}
+                                >
+                                    % of Total Sales
+                                </TableSortLabel>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                                <TableSortLabel
+                                    active={orderBy === 'totalRevenue'}
+                                    direction={orderBy === 'totalRevenue' ? order : 'asc'}
+                                    onClick={() => handleSort('totalRevenue')}
+                                >
+                                    Total Revenue
+                                </TableSortLabel>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                                <TableSortLabel
+                                    active={orderBy === 'percentOfTotalRevenue'}
+                                    direction={orderBy === 'percentOfTotalRevenue' ? order : 'asc'}
+                                    onClick={() => handleSort('percentOfTotalRevenue')}
+                                >
+                                    % of Total Revenue
+                                </TableSortLabel>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                                <TableSortLabel
+                                    active={orderBy === 'averageReviews'}
+                                    direction={orderBy === 'averageReviews' ? order : 'asc'}
+                                    onClick={() => handleSort('averageReviews')}
+                                >
+                                    Avg Reviews
+                                </TableSortLabel>
+                            </StyledTableCell>
+                            <StyledTableCell align="center">Action</StyledTableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {sortedSegments.map((segment, index) => (
+                            <React.Fragment key={index}>
+                                <StyledTableRow hover>
+                                    <TableCell>
+                                        <IconButton
+                                            aria-label="expand row"
+                                            size="small"
+                                            onClick={() => handleExpandClick(segment.name)}
+                                        >
+                                            {expandedSegment === segment.name ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+                                        </IconButton>
+                                    </TableCell>
+                                    <TableCell component="th" scope="row">{segment.name}</TableCell>
+                                    <TableCell align="right">{formatNumber(segment.products.length)}</TableCell>
+                                    <TableCell align="right">{formatPrice(segment.averagePrice)}</TableCell>
+                                    <TableCell align="right">{formatNumber(segment.totalSales)}</TableCell>
+                                    <TableCell align="right">{formatPercent(segment.percentOfTotalSales)}</TableCell>
+                                    <TableCell align="right">{formatPrice(segment.totalRevenue)}</TableCell>
+                                    <TableCell align="right">{formatPercent(segment.percentOfTotalRevenue)}</TableCell>
+                                    <TableCell align="right">{formatNumber(segment.averageReviews)}</TableCell>
+                                    <TableCell align="center">
+                                        <Button 
+                                            variant="contained" 
+                                            size="small" 
+                                            onClick={() => onSegmentSelect(segment.products, segment.name)}
+                                        >
+                                            Select
+                                        </Button>
+                                    </TableCell>
+                                </StyledTableRow>
+                                <TableRow>
+                                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
+                                        <Collapse in={expandedSegment === segment.name} timeout="auto" unmountOnExit>
+                                            <Box margin={1}>
+                                                <Typography variant="h6" gutterBottom component="div">
+                                                    Products
+                                                </Typography>
+                                                <Table size="small" aria-label="purchases">
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell>Title</TableCell>
+                                                            <TableCell align="right">Price</TableCell>
+                                                            <TableCell align="right">Sales</TableCell>
+                                                            <TableCell align="right">Revenue</TableCell>
+                                                            <TableCell align="right">Reviews</TableCell>
+                                                            <TableCell align="right">Rating</TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {segment.products.map((product, productIndex) => (
+                                                            <TableRow key={productIndex}>
+                                                                <TableCell component="th" scope="row">
+                                                                    <a href={product.amazonUrl} target="_blank" rel="noopener noreferrer">
+                                                                        {product.title}
+                                                                    </a>
+                                                                </TableCell>
+                                                                <TableCell align="right">{formatPrice(product.price)}</TableCell>
+                                                                <TableCell align="right">{formatNumber(product.sales)}</TableCell>
+                                                                <TableCell align="right">{formatPrice(product.revenue)}</TableCell>
+                                                                <TableCell align="right">{formatNumber(product.reviews)}</TableCell>
+                                                                <TableCell align="right">{product.rating.toFixed(1)}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </Box>
+                                        </Collapse>
+                                    </TableCell>
+                                </TableRow>
+                            </React.Fragment>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        );
+    };
+
+    const renderCardView = () => {
+        if (sortedSegments.length === 0) {
+            return <Typography>No segments data available</Typography>;
+        }
+
+        return (
+            <Grid container spacing={2}>
+                {sortedSegments.map((segment, index) => (
+                    <Grid item xs={12} sm={6} md={4} key={index}>
+                        <Paper elevation={3} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                            <Typography variant="h6" gutterBottom>{segment.name}</Typography>
+                            <Typography variant="body2">Products: {formatNumber(segment.products.length)}</Typography>
+                            <Typography variant="body2">Avg Price: {formatPrice(segment.averagePrice)}</Typography>
+                            <Typography variant="body2">Total Sales: {formatNumber(segment.totalSales)}</Typography>
+                            <Typography variant="body2">% of Total Sales: {formatPercent(segment.percentOfTotalSales)}</Typography>
+                            <Typography variant="body2">Total Revenue: {formatPrice(segment.totalRevenue)}</Typography>
+                            <Typography variant="body2">% of Total Revenue: {formatPercent(segment.percentOfTotalRevenue)}</Typography>
+                            <Typography variant="body2">Avg Reviews: {formatNumber(segment.averageReviews)}</Typography>
+                            <Box mt={2}>
+                                <Button 
+                                    variant="contained" 
+                                    size="small" 
+                                    fullWidth
+                                    onClick={() => onSegmentSelect(segment.products, segment.name)}
+                                >
+                                    Select
+                                </Button>
+                            </Box>
+                        </Paper>
+                    </Grid>
+                ))}
+            </Grid>
+        );
+    };
+
+    if (loading) return <CircularProgress />;
+    if (!segments) return <Typography>No segments data received</Typography>;
+    if (!Array.isArray(segments.segments)) return <Typography>Invalid segments data structure</Typography>;
+    if (segments.segments.length === 0) return <Typography>No segments available</Typography>;
+
+    return (
+        <Box>
+            <Typography variant="h4" gutterBottom>
+                {currentKeyword ? `Segments for "${currentKeyword}"` : 'Segments Summary'}
+            </Typography>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <FormControlLabel
+                    control={<Switch checked={viewMode === 'cards'} onChange={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} />}
+                    label={viewMode === 'cards' ? "Card View" : "Table View"}
+                />
+            </Box>
+            {viewMode === 'cards' ? renderCardView() : renderTableView()}
+        </Box>
+    );
 };
 
 export default FeatureSegments;

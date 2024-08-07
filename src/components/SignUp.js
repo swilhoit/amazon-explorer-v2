@@ -1,25 +1,25 @@
-// src/components/Login.js
+// src/components/SignUp.js
 import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from '../utils/firebase';
 import { AuthContext } from '../AuthContext'; // Import AuthContext
 import { TextField, Button, Typography, Box, Container } from '@mui/material';
 
-const Login = () => {
+const SignUp = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const { login } = useContext(AuthContext); // Use AuthContext
   const navigate = useNavigate();
 
-  const handleLogin = async (event) => {
+  const handleSignUp = async (event) => {
     event.preventDefault();
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('User logged in:', userCredential.user);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      console.log('User signed up:', userCredential.user);
       login(userCredential.user.accessToken); // Update auth context
-      navigate('/'); // Redirect after successful login
+      navigate('/'); // Redirect after successful sign-up
     } catch (error) {
       setError(error.message);
     }
@@ -36,10 +36,10 @@ const Login = () => {
         }}
       >
         <Typography component="h1" variant="h5">
-          Login
+          Sign Up
         </Typography>
         {error && <Typography color="error">{error}</Typography>}
-        <Box component="form" onSubmit={handleLogin} sx={{ mt: 1 }}>
+        <Box component="form" onSubmit={handleSignUp} sx={{ mt: 1 }}>
           <TextField
             margin="normal"
             required
@@ -70,10 +70,10 @@ const Login = () => {
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
           >
-            Login
+            Sign Up
           </Button>
-          <Link to="/signup" variant="body2">
-            {"Don't have an account? Sign Up"}
+          <Link to="/login" variant="body2">
+            {"Already have an account? Login"}
           </Link>
         </Box>
       </Box>
@@ -81,4 +81,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default SignUp;
