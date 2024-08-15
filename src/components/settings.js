@@ -74,6 +74,7 @@ const Settings = ({ onSave, initialSettings }) => {
           >
             <MenuItem value="groq">GROQ</MenuItem>
             <MenuItem value="openai">OpenAI</MenuItem>
+            <MenuItem value="anthropic">Anthropic</MenuItem>
           </Select>
         </FormControl>
         <Button variant="contained" color="primary" onClick={handleSave}>

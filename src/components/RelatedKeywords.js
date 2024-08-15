@@ -1,19 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { TextField, Button, Container, Typography, Box, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import HistoricalSearchVolumeGraph from './HistoricalSearchVolumeGraph';
+import { fetchRelatedKeywords, fetchHistoricalData } from '../utils/junglescout';
 
-const StyledTableCell = styled(TableCell)({
-    backgroundColor: '#f0f0f0',
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+    backgroundColor: theme.palette.common.black,
+    color: theme.palette.common.white,
     fontWeight: 'bold',
-    cursor: 'pointer'
-});
+    padding: '8px',
+}));
+
+const TrendCell = styled(TableCell)(({ theme, value }) => ({
+    padding: '8px',
+    color: value > 0 ? 'green' : value < 0 ? 'red' : 'inherit',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    minWidth: '120px' // Added to ensure content does not overlap
+}));
 
 const RelatedKeywords = () => {
     const [keyword, setKeyword] = useState('');
     const [data, setData] = useState([]);
+    const [historicalData, setHistoricalData] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [sortConfig, setSortConfig] = useState({ key: 'monthly_search_volume_exact', direction: 'descending' });
 
     // Load cache from localStorage on initial render
     const initialCache = JSON.parse(localStorage.getItem('relatedKeywordsCache')) || {};
@@ -31,6 +44,7 @@ const RelatedKeywords = () => {
     const handleFetchData = async () => {
         setLoading(true);
         setData([]);
+        setHistoricalData([]);
         console.log('Fetching related keywords for:', keyword);
 
         if (cache[keyword]) {
@@ -40,77 +54,49 @@ const RelatedKeywords = () => {
             return;
         }
 
-        const apiKey = process.env.REACT_APP_JUNGLE_SCOUT_API_KEY;
-        const keyName = process.env.REACT_APP_JUNGLE_SCOUT_KEY_NAME;
-
-        const headers = {
-            'Authorization': `${keyName}:${apiKey}`,
-            'X-API-Type': 'junglescout',
-            'Accept': 'application/vnd.junglescout.v1+json',
-            'Content-Type': 'application/vnd.api+json',
-        };
-
-        const url = `https://developer.junglescout.com/api/keywords/keywords_by_keyword_query?marketplace=us&sort=-monthly_search_volume_exact&page[size]=50`;
-        const payload = {
-            data: {
-                type: "keywords_by_keyword_query",
-                attributes: {
-                    search_terms: keyword
-                }
-            }
-        };
-
         try {
-            const response = await axios.post(url, payload, { headers });
-            console.log("Response data:", response.data);
-            setData(response.data.data);
-            sortData(sortConfig.key, sortConfig.direction, response.data.data);
+            const relatedKeywordsData = await fetchRelatedKeywords(keyword);
+            console.log('API Response - Related Keywords:', relatedKeywordsData); // Added API response log
 
-            // Update the cache
+            const originalKeywordData = relatedKeywordsData.find(item => item.keyword.toLowerCase() === keyword.toLowerCase());
+            const otherKeywords = relatedKeywordsData.filter(item => item.keyword.toLowerCase() !== keyword.toLowerCase());
+            
+            otherKeywords.sort((a, b) => b.relevancy_score - a.relevancy_score);
+            const sortedData = originalKeywordData ? [originalKeywordData, ...otherKeywords] : otherKeywords;
+            
+            setData(sortedData);
+            
             setCache(prevCache => ({
                 ...prevCache,
-                [keyword]: response.data.data
+                [keyword]: sortedData
             }));
+
+            const historicalData = await fetchHistoricalData(keyword);
+            console.log('API Response - Historical Data:', historicalData); // Added API response log
+            setHistoricalData(historicalData);
+
         } catch (error) {
-            console.error("Error fetching related keywords:", error);
-            if (error.response) {
-                console.error("Error response data:", error.response.data); // Log the error response data
-            }
+            console.error("Error fetching data:", error);
         }
 
         setLoading(false);
     };
 
-    const sortData = (key, direction, newData = data) => {
-        const sortedData = [...newData].sort((a, b) => {
-            const aValue = a.attributes[key] || 0;
-            const bValue = b.attributes[key] || 0;
-            if (direction === 'ascending') {
-                return aValue - bValue;
-            } else {
-                return bValue - aValue;
-            }
-        });
-        setData(sortedData);
-    };
-
-    const handleSort = (key) => {
-        let direction = 'ascending';
-        if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-            direction = 'descending';
-        }
-        setSortConfig({ key, direction });
-        sortData(key, direction);
-    };
+    const renderTrendValue = (value) => (
+        <>
+            {value > 0 ? <ArrowUpwardIcon fontSize="small" /> : value < 0 ? <ArrowDownwardIcon fontSize="small" /> : null}
+            {value.toFixed(2)}
+        </>
+    );
 
     return (
         <Container>
-            <Box my={4} display="flex" justifyContent="space-between" alignItems="center">
+            <Box my={4}>
                 <Typography variant="h4" component="h1" gutterBottom>
                     Related Keywords Explorer
                 </Typography>
             </Box>
-            <Box display="flex" alignItems="center" mb={2} sx={{ marginRight: 1 }}>
+            <Box display="flex" alignItems="center" mb={2}>
                 <TextField
                     label="Enter a keyword"
                     variant="outlined"
@@ -122,36 +108,45 @@ const RelatedKeywords = () => {
                     {loading ? <CircularProgress size={24} /> : 'Fetch Data'}
                 </Button>
             </Box>
+            
+            {historicalData.length > 0 && (
+                <HistoricalSearchVolumeGraph data={historicalData} />
+            )}
+
             {data.length > 0 && (
                 <TableContainer component={Paper}>
                     <Table size="small">
                         <TableHead>
                             <TableRow>
-                                <StyledTableCell onClick={() => handleSort('name')}>Keyword</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('monthly_search_volume_exact')}>Search Volume</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('relevancy_score')}>Relevancy Score</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('monthly_trend')}>Monthly Trend</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('quarterly_trend')}>Quarterly Trend</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('recommended_promotions')}>Recommended Promotions</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('ppc_bid_broad')}>PPC Bid Broad</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('ppc_bid_exact')}>PPC Bid Exact</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('organic_product_count')}>Organic Product Count</StyledTableCell>
-                                <StyledTableCell onClick={() => handleSort('sponsored_product_count')}>Sponsored Product Count</StyledTableCell>
+                                <StyledTableCell>Keyword</StyledTableCell>
+                                <StyledTableCell>Search Volume</StyledTableCell>
+                                <StyledTableCell>Relevancy Score</StyledTableCell>
+                                <StyledTableCell>Monthly Trend</StyledTableCell>
+                                <StyledTableCell>Quarterly Trend</StyledTableCell>
+                                <StyledTableCell>Recommended Promotions</StyledTableCell>
+                                <StyledTableCell>PPC Bid Broad</StyledTableCell>
+                                <StyledTableCell>PPC Bid Exact</StyledTableCell>
+                                <StyledTableCell>Organic Product Count</StyledTableCell>
+                                <StyledTableCell>Sponsored Product Count</StyledTableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {data.map((item, index) => (
                                 <TableRow key={index}>
-                                    <TableCell>{item.attributes.name}</TableCell>
-                                    <TableCell>{item.attributes.monthly_search_volume_exact}</TableCell>
-                                    <TableCell>{item.attributes.relevancy_score}</TableCell>
-                                    <TableCell>{item.attributes.monthly_trend}</TableCell>
-                                    <TableCell>{item.attributes.quarterly_trend}</TableCell>
-                                    <TableCell>{item.attributes.recommended_promotions}</TableCell>
-                                    <TableCell>{item.attributes.ppc_bid_broad}</TableCell>
-                                    <TableCell>{item.attributes.ppc_bid_exact}</TableCell>
-                                    <TableCell>{item.attributes.organic_product_count}</TableCell>
-                                    <TableCell>{item.attributes.sponsored_product_count}</TableCell>
+                                    <TableCell>{item.keyword}</TableCell>
+                                    <TableCell>{item.search_volume}</TableCell>
+                                    <TableCell>{item.relevancy_score}</TableCell>
+                                    <TrendCell value={item.monthly_trend}>
+                                        {renderTrendValue(item.monthly_trend)}
+                                    </TrendCell>
+                                    <TrendCell value={item.quarterly_trend}>
+                                        {renderTrendValue(item.quarterly_trend)}
+                                    </TrendCell>
+                                    <TableCell>{item.recommended_promotions || '-'}</TableCell>
+                                    <TableCell>{item.ppc_bid_broad || '-'}</TableCell>
+                                    <TableCell>{item.ppc_bid_exact || '-'}</TableCell>
+                                    <TableCell>{item.organic_product_count}</TableCell>
+                                    <TableCell>{item.sponsored_product_count}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -163,3 +158,4 @@ const RelatedKeywords = () => {
 };
 
 export default RelatedKeywords;
+

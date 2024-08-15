@@ -13,11 +13,12 @@ class AmazonPPCCalculator {
       averageSearchConversionRate: 0.51,
       averageCPC: 0.52,
       clickThroughRate: 25.99,
+      moq: 100,
       ...initialData
     };
   }
 
-  calculateMetrics(isMonthly = false) {
+  calculateMetrics(isMonthly = false, useClickCount = false) {
     const {
       clickShare,
       organicShare,
@@ -27,10 +28,18 @@ class AmazonPPCCalculator {
       totalSearchVolume,
       averageSearchConversionRate,
       averageCPC,
-      clickThroughRate
+      clickThroughRate,
+      moq
     } = this.data;
 
-    const clickShareDecimal = clickShare / 100;
+    let clickShareDecimal;
+    if (useClickCount) {
+      const totalClicks = totalSearchVolume * (clickThroughRate / 100);
+      clickShareDecimal = clickShare / totalClicks;
+    } else {
+      clickShareDecimal = clickShare / 100;
+    }
+
     const organicShareDecimal = organicShare / 100;
     const conversionRateDecimal = averageSearchConversionRate / 100;
     const clickThroughRateDecimal = clickThroughRate / 100;
@@ -53,6 +62,7 @@ class AmazonPPCCalculator {
     const costPerPPCConversion = paidOrders > 0 ? totalAdSpend / paidOrders : 0;
     const profitPerOrganicSale = listPrice - (sourcePrice + fees);
     const tacos = totalRevenue > 0 ? (totalAdSpend / totalRevenue) * 100 : 0;
+    const startupCost = moq * sourcePrice;
 
     const divisor = isMonthly ? 12 : 1;
 
@@ -74,7 +84,9 @@ class AmazonPPCCalculator {
       clickThroughRate,
       totalOrders: (paidOrders + organicOrders) / divisor,
       paidOrders: paidOrders / divisor,
-      organicOrders: organicOrders / divisor
+      organicOrders: organicOrders / divisor,
+      startupCost,
+      clickShare: clickShareDecimal * 100
     };
   }
 }
@@ -107,14 +119,16 @@ const CalculatorComponent = () => {
         totalSearchVolume: 1492850,
         averageSearchConversionRate: 0.51,
         averageCPC: 0.52,
-        clickThroughRate: 25.99
+        clickThroughRate: 25.99,
+        moq: 100
     });
     const [metrics, setMetrics] = useState(null);
     const [isMonthly, setIsMonthly] = useState(false);
+    const [useClickCount, setUseClickCount] = useState(false);
 
     useEffect(() => {
         calculateMetrics();
-    }, [inputs, isMonthly]);
+    }, [inputs, isMonthly, useClickCount]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -128,7 +142,7 @@ const CalculatorComponent = () => {
     const calculateMetrics = () => {
         try {
             const calculator = new AmazonPPCCalculator(inputs);
-            const calculatedMetrics = calculator.calculateMetrics(isMonthly);
+            const calculatedMetrics = calculator.calculateMetrics(isMonthly, useClickCount);
             setMetrics(calculatedMetrics);
         } catch (error) {
             console.error("Error calculating metrics:", error);
@@ -154,9 +168,9 @@ const CalculatorComponent = () => {
     };
 
     const getMetricType = (key) => {
-        const percentMetrics = ['roi', 'tacos', 'averageSearchConversionRate', 'clickThroughRate'];
+        const percentMetrics = ['roi', 'tacos', 'averageSearchConversionRate', 'clickThroughRate', 'clickShare'];
         const integerMetrics = ['totalSearchVolume', 'totalClicks', 'totalOrders', 'paidOrders', 'organicOrders'];
-        const currencyMetrics = ['revenue', 'paidRevenue', 'organicRevenue', 'totalAdSpend', 'totalLandingCost', 'profit', 'costPerPPCConversion', 'profitPerOrganicSale', 'averageCPC'];
+        const currencyMetrics = ['revenue', 'paidRevenue', 'organicRevenue', 'totalAdSpend', 'totalLandingCost', 'profit', 'costPerPPCConversion', 'profitPerOrganicSale', 'averageCPC', 'startupCost'];
 
         if (percentMetrics.includes(key)) return 'percent';
         if (integerMetrics.includes(key)) return 'integer';
@@ -183,7 +197,9 @@ const CalculatorComponent = () => {
             clickThroughRate: "Input value",
             totalOrders: "Total Search Volume * Average Search Conversion Rate",
             paidOrders: "Total Orders * Click Share",
-            organicOrders: "Total Orders * Organic Share"
+            organicOrders: "Total Orders * Organic Share",
+            startupCost: "MOQ * Source Price",
+            clickShare: useClickCount ? "Number of Clicks / Total Clicks" : "Input value"
         };
         return formulas[key] || "Formula not available";
     };
@@ -200,6 +216,7 @@ const CalculatorComponent = () => {
         expenses: [
           ['totalAdSpend', metrics.totalAdSpend],
           ['totalLandingCost', metrics.totalLandingCost],
+          ['startupCost', metrics.startupCost],
         ],
         profitability: [
           ['profit', metrics.profit],
@@ -217,6 +234,7 @@ const CalculatorComponent = () => {
           ['averageCPC', metrics.averageCPC],
           ['averageSearchConversionRate', metrics.averageSearchConversionRate],
           ['clickThroughRate', metrics.clickThroughRate],
+          ['clickShare', metrics.clickShare],
         ],
       };
     };
@@ -230,22 +248,38 @@ const CalculatorComponent = () => {
                 control={<Switch checked={isMonthly} onChange={() => setIsMonthly(!isMonthly)} />}
                 label={isMonthly ? "Monthly View" : "Annual View"}
             />
+            <FormControlLabel
+                control={<Switch checked={useClickCount} onChange={() => setUseClickCount(!useClickCount)} />}
+                label={useClickCount ? "Use Click Count" : "Use Click Share %"}
+            />
             <Grid container spacing={3}>
                 <Grid item xs={12} md={6}>
                     <Paper elevation={3} sx={{ p: 3 }}>
                         <Typography variant="h6" gutterBottom>Inputs</Typography>
                         <Box sx={{ mb: 2 }}>
-                            <Typography gutterBottom>Click Share: {inputs.clickShare.toFixed(1)}%</Typography>
-                            <Slider
-                                value={inputs.clickShare}
-                                onChange={handleSliderChange('clickShare')}
-                                aria-labelledby="click-share-slider"
-                                valueLabelDisplay="auto"
-                                step={0.1}
-                                marks
-                                min={0}
-                                max={100}
-                            />
+                            <Typography gutterBottom>{useClickCount ? "Number of Clicks" : "Click Share (%)"}</Typography>
+                            {useClickCount ? (
+                                <TextField
+                                    fullWidth
+                                    margin="normal"
+                                    label="Number of Clicks"
+                                    name="clickShare"
+                                    type="number"
+                                    value={inputs.clickShare}
+                                    onChange={handleInputChange}
+                                />
+                            ) : (
+                                <Slider
+                                    value={inputs.clickShare}
+                                    onChange={handleSliderChange('clickShare')}
+                                    aria-labelledby="click-share-slider"
+                                    valueLabelDisplay="auto"
+                                    step={0.1}
+                                    marks
+                                    min={0}
+                                    max={100}
+                                />
+                            )}
                         </Box>
                         <Box sx={{ mb: 2 }}>
                             <Typography gutterBottom>Organic Share: {inputs.organicShare.toFixed(1)}%</Typography>

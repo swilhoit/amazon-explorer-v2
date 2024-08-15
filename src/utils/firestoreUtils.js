@@ -4,7 +4,7 @@ import { collection, setDoc, doc } from 'firebase/firestore';
 
 export const addProductToFirestore = async (product) => {
   try {
-    const productRef = doc(db, 'products', product.asin); 
+    const productRef = doc(db, 'products', product.asin); // Use ASIN as the document ID
     await setDoc(productRef, {
       title: product.title,
       brand: product.brand,

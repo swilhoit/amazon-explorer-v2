@@ -1,70 +1,182 @@
 import axios from 'axios';
 
-// Constants for API
-const JUNGLE_SCOUT_API_BASE_URL = 'https://developer.junglescout.com/api/product_database_query';
-const jungleScoutApiKey = process.env.REACT_APP_JUNGLE_SCOUT_API_KEY;
-const jungleScoutKeyName = process.env.REACT_APP_JUNGLE_SCOUT_KEY_NAME;
-const jungleScoutHeaders = {
-    'Authorization': `${jungleScoutKeyName}:${jungleScoutApiKey}`,
+// API key and header configurations
+const apiKey = process.env.REACT_APP_JUNGLE_SCOUT_API_KEY;
+const keyName = process.env.REACT_APP_JUNGLE_SCOUT_KEY_NAME;
+
+const headers = {
+    'Authorization': `${keyName}:${apiKey}`,
+    'X-API-Type': 'junglescout',
     'Accept': 'application/vnd.junglescout.v1+json',
-    'Content-Type': 'application/vnd.api+json',
+    'Content-Type': 'application/vnd.api+json'
 };
 
-// Function to fetch data based on keywords
+// Function to fetch product database query results
+export const fetchProductDatabaseQuery = async (searchParams) => {
+  const baseUrl = 'https://developer.junglescout.com/api/product_database_query';
+  const queryParams = new URLSearchParams({
+    marketplace: searchParams.marketplace || 'us',
+    sort: searchParams.sort || 'name',
+    'page[size]': searchParams.pageSize || 50,
+  });
+
+  const url = `${baseUrl}?${queryParams.toString()}`;
+
+  const payload = {
+    data: {
+      type: "product_database_query",
+      attributes: {
+        include_keywords: searchParams.includeKeywords || [],
+        exclude_unavailable_products: searchParams.excludeUnavailableProducts || true,
+        "min_sales": 1,
+      }
+    }
+  };
+
+  try {
+    const response = await axios.post(url, payload, { headers });
+    console.log('API Request Successful:', response);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching product database query results:", error);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+    }
+    throw error;
+  }
+};
+
+
 export const fetchDataForKeywords = async (keywords) => {
-    const url = `${JUNGLE_SCOUT_API_BASE_URL}?marketplace=us`;
+    const url = `https://developer.junglescout.com/api/keywords/keywords_by_keyword_query`;
+    const queryParams = new URLSearchParams({
+        marketplace: 'us',
+        sort: '-monthly_search_volume_exact',
+        'page[size]': '50'
+    });
     let allResults = [];
 
     for (const keyword of keywords) {
         const payload = {
             data: {
-                type: "product_database_query",
+                type: "keywords_by_keyword_query",
                 attributes: {
-                    include_keywords: [keyword],
-                    exclude_unavailable_products: true
+                    search_terms: keyword
                 }
             }
         };
 
         try {
-            const response = await axios.post(url, payload, { headers: jungleScoutHeaders });
+            const response = await axios.post(`${url}?${queryParams.toString()}`, payload, { headers });
             if (response.data && Array.isArray(response.data.data)) {
-                const results = response.data.data.map(item => processJungleScoutItem(item)).filter(item => item !== null);
+                const results = response.data.data.map(item => ({
+                    keyword: item.attributes.name,
+                    search_volume: item.attributes.monthly_search_volume_exact,
+                    relevancy_score: item.attributes.relevancy_score,
+                    monthly_trend: item.attributes.monthly_trend,
+                    quarterly_trend: item.attributes.quarterly_trend,
+                    recommended_promotions: item.attributes.recommended_promotions,
+                    ppc_bid_broad: item.attributes.ppc_bid_broad,
+                    ppc_bid_exact: item.attributes.ppc_bid_exact,
+                    organic_product_count: item.attributes.organic_product_count,
+                    sponsored_product_count: item.attributes.sponsored_product_count
+                })).filter(item => item !== null);
                 allResults = [...allResults, ...results];
             }
         } catch (error) {
             console.error("API request failed:", error);
+            if (error.response) {
+                console.error('Response data:', error.response.data);
+                console.error('Response status:', error.response.status);
+                console.error('Response headers:', error.response.headers);
+            }
         }
     }
 
     return allResults;
 };
 
-// Function to process each JungleScout item
-const processJungleScoutItem = (item) => {
-    if (!item) {
-        console.error("Received null item in processJungleScoutItem");
-        return null; // Return null here intentionally if item is undefined or null
-    }
-
-    return {
-        asin: item.asin || '',
-        title: item.title || '',
-        brand: item.brand || '',
-        price: parseFloat(item.price || 0),
-        reviews: parseInt(item.reviews || 0),
-        rating: parseFloat(item.rating || 0),
-        sales: parseInt(item.sales || 0),
-        revenue: parseFloat(item.revenue || 0),
-        sellerType: item.sellerType || '',
-        dateFirstAvailable: item.dateFirstAvailable || '',
-        category: item.category || '',
-        imageUrl: item.imageUrl || '',
-        amazonUrl: item.amazonUrl || ''
+export const fetchRelatedKeywords = async (keyword) => {
+    const url = `https://developer.junglescout.com/api/keywords/keywords_by_keyword_query`;
+    const queryParams = new URLSearchParams({
+        marketplace: 'us',
+        sort: '-monthly_search_volume_exact',
+        'page[size]': '50'
+    });
+    const payload = {
+        data: {
+            type: "keywords_by_keyword_query",
+            attributes: {
+                search_terms: keyword
+            }
+        }
     };
+
+    try {
+        const response = await axios.post(`${url}?${queryParams.toString()}`, payload, { headers });
+        return response.data.data.map(item => ({
+            keyword: item.attributes.name,
+            search_volume: item.attributes.monthly_search_volume_exact,
+            relevancy_score: item.attributes.relevancy_score,
+            monthly_trend: item.attributes.monthly_trend,
+            quarterly_trend: item.attributes.quarterly_trend,
+            recommended_promotions: item.attributes.recommended_promotions,
+            ppc_bid_broad: item.attributes.ppc_bid_broad,
+            ppc_bid_exact: item.attributes.ppc_bid_exact,
+            organic_product_count: item.attributes.organic_product_count,
+            sponsored_product_count: item.attributes.sponsored_product_count
+        }));
+    } catch (error) {
+        console.error("Error fetching related keywords:", error);
+        if (error.response) {
+            console.error('Response data:', error.response.data);
+            console.error('Response status:', error.response.status);
+            console.error('Response headers:', error.response.headers);
+        }
+        throw error;
+    }
 };
 
-// Example usage
-fetchDataForKeywords(['example keyword']).then(processedData => {
-    console.log('Processed Data:', processedData);
-}).catch(e => console.error('Error processing data:', e));
+export const fetchHistoricalData = async (keyword) => {
+    const endDate = new Date();
+    const startDate = new Date(endDate);
+    startDate.setFullYear(endDate.getFullYear() - 1);
+
+    const url = `https://developer.junglescout.com/api/keywords/historical_search_volume`;
+    const queryParams = new URLSearchParams({
+        marketplace: 'us',
+        keyword: keyword,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0]
+    });
+
+    try {
+        const response = await axios.get(`${url}?${queryParams.toString()}`, { headers });
+        return response.data.data;
+    } catch (error) {
+        console.error("Error fetching historical data:", error);
+        if (error.response) {
+            console.error('Response data:', error.response.data);
+            console.error('Response status:', error.response.status);
+            console.error('Response headers:', error.response.headers);
+        }
+        throw error;
+    }
+};
+
+export const fetchKeywordData = async (keyword) => {
+    try {
+        const relatedKeywordsData = await fetchRelatedKeywords(keyword);
+        const historicalData = await fetchHistoricalData(keyword);
+
+        return {
+            relatedKeywords: relatedKeywordsData,
+            historicalData: historicalData
+        };
+    } catch (error) {
+        console.error("Error fetching keyword data:", error);
+        throw error;
+    }
+};

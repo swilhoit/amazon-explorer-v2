@@ -2,10 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Box, Typography, CircularProgress, Grid, Paper, Switch, 
   FormControlLabel, Table, TableBody, TableCell, TableContainer, 
-  TableHead, TableRow, TableSortLabel, Button, Collapse, IconButton
+  TableHead, TableRow, TableSortLabel, IconButton,
+  Card, CardContent, CardMedia, Collapse
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
+import { KeyboardArrowDown, KeyboardArrowUp, ArrowForward, Recycling } from '@mui/icons-material';
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
   backgroundColor: theme.palette.common.black,
@@ -22,8 +23,44 @@ const StyledTableRow = styled(TableRow)(({ theme }) => ({
   },
 }));
 
+const MetricBox = styled(Box)(({ theme }) => ({
+  marginBottom: theme.spacing(1),
+}));
+
+const MetricLabel = styled(Typography)(({ theme }) => ({
+  fontWeight: 'bold',
+  marginBottom: theme.spacing(0.5),
+}));
+
+const MetricValue = styled(Typography)(({ theme }) => ({
+  fontWeight: 'bold',
+  fontSize: '1.1rem',
+}));
+
+const MetricSubtext = styled(Typography)(({ theme }) => ({
+  color: theme.palette.text.secondary,
+  fontSize: '0.8rem',
+}));
+
+const MetricGrid = styled(Grid)(({ theme }) => ({
+  marginBottom: theme.spacing(2),
+}));
+
+const TitleBox = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: theme.spacing(2),
+}));
+
+const KeywordTitle = styled(Typography)(({ theme }) => ({
+  fontFamily: 'Montserrat, sans-serif',
+  fontWeight: 'bold',
+  fontSize: '1.5rem',
+}));
+
 const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, loading }) => {
-    const [viewMode, setViewMode] = useState('table');
+    const [viewMode, setViewMode] = useState('cards');
     const [orderBy, setOrderBy] = useState('totalRevenue');
     const [order, setOrder] = useState('desc');
     const [expandedSegment, setExpandedSegment] = useState(null);
@@ -50,7 +87,10 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
                 return order === 'asc' ? -1 : 1;
             }
             return 0;
-        });
+        }).map(segment => ({
+            ...segment,
+            topRevenueProduct: segment.products.reduce((max, product) => max.revenue > product.revenue ? max : product)
+        }));
     }, [segments, order, orderBy]);
 
     const handleSort = (property) => {
@@ -86,7 +126,8 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
                     <TableHead>
                         <TableRow>
                             <StyledTableCell />
-                            <StyledTableCell>Segment</StyledTableCell>
+                            <StyledTableCell>Thumbnail</StyledTableCell>
+                            <StyledTableCell style={{ width: '25%' }}>Segment</StyledTableCell>
                             <StyledTableCell align="right">
                                 <TableSortLabel
                                     active={orderBy === 'products.length'}
@@ -116,29 +157,11 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
                             </StyledTableCell>
                             <StyledTableCell align="right">
                                 <TableSortLabel
-                                    active={orderBy === 'percentOfTotalSales'}
-                                    direction={orderBy === 'percentOfTotalSales' ? order : 'asc'}
-                                    onClick={() => handleSort('percentOfTotalSales')}
-                                >
-                                    % of Total Sales
-                                </TableSortLabel>
-                            </StyledTableCell>
-                            <StyledTableCell align="right">
-                                <TableSortLabel
                                     active={orderBy === 'totalRevenue'}
                                     direction={orderBy === 'totalRevenue' ? order : 'asc'}
                                     onClick={() => handleSort('totalRevenue')}
                                 >
                                     Total Revenue
-                                </TableSortLabel>
-                            </StyledTableCell>
-                            <StyledTableCell align="right">
-                                <TableSortLabel
-                                    active={orderBy === 'percentOfTotalRevenue'}
-                                    direction={orderBy === 'percentOfTotalRevenue' ? order : 'asc'}
-                                    onClick={() => handleSort('percentOfTotalRevenue')}
-                                >
-                                    % of Total Revenue
                                 </TableSortLabel>
                             </StyledTableCell>
                             <StyledTableCell align="right">
@@ -150,7 +173,7 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
                                     Avg Reviews
                                 </TableSortLabel>
                             </StyledTableCell>
-                            <StyledTableCell align="center">Action</StyledTableCell>
+                            <StyledTableCell align="center">Actions</StyledTableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -166,26 +189,39 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
                                             {expandedSegment === segment.name ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
                                         </IconButton>
                                     </TableCell>
-                                    <TableCell component="th" scope="row">{segment.name}</TableCell>
+                                    <TableCell>
+                                        <img 
+                                            src={segment.topRevenueProduct.imageUrl} 
+                                            alt={segment.name} 
+                                            style={{ width: 50, height: 50, objectFit: 'contain' }}
+                                        />
+                                    </TableCell>
+                                    <TableCell component="th" scope="row" style={{ width: '25%' }}>{segment.name}</TableCell>
                                     <TableCell align="right">{formatNumber(segment.products.length)}</TableCell>
                                     <TableCell align="right">{formatPrice(segment.averagePrice)}</TableCell>
                                     <TableCell align="right">{formatNumber(segment.totalSales)}</TableCell>
-                                    <TableCell align="right">{formatPercent(segment.percentOfTotalSales)}</TableCell>
                                     <TableCell align="right">{formatPrice(segment.totalRevenue)}</TableCell>
-                                    <TableCell align="right">{formatPercent(segment.percentOfTotalRevenue)}</TableCell>
                                     <TableCell align="right">{formatNumber(segment.averageReviews)}</TableCell>
                                     <TableCell align="center">
-                                        <Button 
-                                            variant="contained" 
-                                            size="small" 
-                                            onClick={() => onSegmentSelect(segment.products, segment.name)}
+                                        <IconButton
+                                            color="primary"
+                                            onClick={() => {/* Placeholder function */}}
+                                            size="small"
+                                            sx={{ mr: 1 }}
                                         >
-                                            Select
-                                        </Button>
+                                            <Recycling />
+                                        </IconButton>
+                                        <IconButton
+                                            color="primary"
+                                            onClick={() => onSegmentSelect(segment.products, segment.name)}
+                                            size="small"
+                                        >
+                                            <ArrowForward />
+                                        </IconButton>
                                     </TableCell>
                                 </StyledTableRow>
                                 <TableRow>
-                                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
+                                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
                                         <Collapse in={expandedSegment === segment.name} timeout="auto" unmountOnExit>
                                             <Box margin={1}>
                                                 <Typography variant="h6" gutterBottom component="div">
@@ -194,6 +230,7 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
                                                 <Table size="small" aria-label="purchases">
                                                     <TableHead>
                                                         <TableRow>
+                                                            <TableCell>Image</TableCell>
                                                             <TableCell>Title</TableCell>
                                                             <TableCell align="right">Price</TableCell>
                                                             <TableCell align="right">Sales</TableCell>
@@ -205,6 +242,13 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
                                                     <TableBody>
                                                         {segment.products.map((product, productIndex) => (
                                                             <TableRow key={productIndex}>
+                                                                <TableCell>
+                                                                    <img 
+                                                                        src={product.imageUrl} 
+                                                                        alt={product.title} 
+                                                                        style={{ width: 50, height: 50, objectFit: 'contain' }}
+                                                                    />
+                                                                </TableCell>
                                                                 <TableCell component="th" scope="row">
                                                                     <a href={product.amazonUrl} target="_blank" rel="noopener noreferrer">
                                                                         {product.title}
@@ -240,26 +284,69 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
             <Grid container spacing={2}>
                 {sortedSegments.map((segment, index) => (
                     <Grid item xs={12} sm={6} md={4} key={index}>
-                        <Paper elevation={3} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                            <Typography variant="h6" gutterBottom>{segment.name}</Typography>
-                            <Typography variant="body2">Products: {formatNumber(segment.products.length)}</Typography>
-                            <Typography variant="body2">Avg Price: {formatPrice(segment.averagePrice)}</Typography>
-                            <Typography variant="body2">Total Sales: {formatNumber(segment.totalSales)}</Typography>
-                            <Typography variant="body2">% of Total Sales: {formatPercent(segment.percentOfTotalSales)}</Typography>
-                            <Typography variant="body2">Total Revenue: {formatPrice(segment.totalRevenue)}</Typography>
-                            <Typography variant="body2">% of Total Revenue: {formatPercent(segment.percentOfTotalRevenue)}</Typography>
-                            <Typography variant="body2">Avg Reviews: {formatNumber(segment.averageReviews)}</Typography>
-                            <Box mt={2}>
-                                <Button 
-                                    variant="contained" 
-                                    size="small" 
-                                    fullWidth
-                                    onClick={() => onSegmentSelect(segment.products, segment.name)}
-                                >
-                                    Select
-                                </Button>
+                        <Card sx={{ height: '100%' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', p: 2 }}>
+                                <CardMedia
+                                    component="img"
+                                    sx={{ width: 80, height: 80, marginRight: 2 }}
+                                    image={segment.topRevenueProduct.imageUrl}
+                                    alt={segment.name}
+                                />
+                                <Typography component="div" variant="h6">
+                                    {segment.name}
+                                </Typography>
                             </Box>
-                        </Paper>
+                            <CardContent>
+                                <MetricGrid container spacing={2}>
+                                    <Grid item xs={6}>
+                                        <MetricBox>
+                                            <MetricLabel variant="body2">Products</MetricLabel>
+                                            <MetricValue>{formatNumber(segment.products.length)}</MetricValue>
+                                            <MetricSubtext>{formatPercent(segment.percentOfTotalProducts)} of total</MetricSubtext>
+                                        </MetricBox>
+                                        <MetricBox>
+                                            <MetricLabel variant="body2">Avg Price</MetricLabel>
+                                            <MetricValue>{formatPrice(segment.averagePrice)}</MetricValue>
+                                            <MetricSubtext>Range: {formatPrice(segment.minPrice)} - {formatPrice(segment.maxPrice)}</MetricSubtext>
+                                        </MetricBox>
+                                        <MetricBox>
+                                            <MetricLabel variant="body2">Total Sales</MetricLabel>
+                                            <MetricValue>{formatNumber(segment.totalSales)}</MetricValue>
+                                            <MetricSubtext>{formatPercent(segment.percentOfTotalSales)} of total</MetricSubtext>
+                                        </MetricBox>
+                                    </Grid>
+                                    <Grid item xs={6}>
+                                        <MetricBox>
+                                            <MetricLabel variant="body2">Total Revenue</MetricLabel>
+                                            <MetricValue>{formatPrice(segment.totalRevenue)}</MetricValue>
+                                            <MetricSubtext>{formatPercent(segment.percentOfTotalRevenue)} of total</MetricSubtext>
+                                        </MetricBox>
+                                        <MetricBox>
+                                            <MetricLabel variant="body2">Avg Reviews</MetricLabel>
+                                            <MetricValue>{formatNumber(segment.averageReviews)}</MetricValue>
+                                            <MetricSubtext>Range: {formatNumber(segment.minReviews)} - {formatNumber(segment.maxReviews)}</MetricSubtext>
+                                        </MetricBox>
+                                    </Grid>
+                                </MetricGrid>
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => {/* Placeholder function */}}
+                                        size="small"
+                                        sx={{ mr: 1 }}
+                                    >
+                                        <Recycling />
+                                    </IconButton>
+                                    <IconButton
+                                        color="primary"
+                                        onClick={() => onSegmentSelect(segment.products, segment.name)}
+                                        size="small"
+                                    >
+                                        <ArrowForward />
+                                    </IconButton>
+                                </Box>
+                            </CardContent>
+                        </Card>
                     </Grid>
                 ))}
             </Grid>
@@ -273,15 +360,23 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
 
     return (
         <Box>
-            <Typography variant="h4" gutterBottom>
-                {currentKeyword ? `Segments for "${currentKeyword}"` : 'Segments Summary'}
-            </Typography>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <TitleBox>
+                <KeywordTitle>
+                    Segments for "<span style={{ fontWeight: 'bold' }}>{currentKeyword}</span>"
+                </KeywordTitle>
+                <Typography variant="body2">
+                    Total Results: {segments.segments.length} | Debug Info: Has segments: Yes
+                </Typography>
                 <FormControlLabel
-                    control={<Switch checked={viewMode === 'cards'} onChange={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} />}
-                    label={viewMode === 'cards' ? "Card View" : "Table View"}
+                    control={
+                        <Switch 
+                            checked={viewMode === 'cards'} 
+                            onChange={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} 
+                        />
+                    }
+                    label="Card View"
                 />
-            </Box>
+            </TitleBox>
             {viewMode === 'cards' ? renderCardView() : renderTableView()}
         </Box>
     );

@@ -96,6 +96,10 @@ const DataTable = ({
         return value.toString();
     };
 
+    const SummaryTableCell = styled(StyledTableCell)(({ theme }) => ({
+        fontWeight: 'bold',
+      }));
+
     return (
         <TableContainer component={Paper}>
             <Table>
@@ -188,32 +192,32 @@ const DataTable = ({
                     </TableRow>
                     </TableHead>
                 <TableBody>
-                    {summaryData && (
-                        <StyledTableRow>
-                            <StyledTableCell>
-                                <Button 
-                                    variant="contained" 
-                                    color="secondary" 
-                                    onClick={handleCompare} 
-                                    disabled={selectedForComparison.length === 0}
-                                    size="small"
-                                >
-                                    Compare
-                                </Button>
-                            </StyledTableCell>
-                            <StyledTableCell>-</StyledTableCell>
-                            <StyledTableCell>Summary</StyledTableCell>
-                            <StyledTableCell>{formatValue(summaryData.price, true)}</StyledTableCell>
-                            <StyledTableCell>{formatValue(summaryData.reviews)}</StyledTableCell>
-                            <StyledTableCell>{formatValue(summaryData.sales)}</StyledTableCell>
-                            <StyledTableCell>{typeof summaryData.percentOfTotalSales === 'number' ? `${summaryData.percentOfTotalSales.toFixed(2)}%` : 'N/A'}</StyledTableCell>
-                            <StyledTableCell>{formatValue(summaryData.revenue, true)}</StyledTableCell>
-                            <StyledTableCell>{typeof summaryData.percentOfTotalRevenue === 'number' ? `${summaryData.percentOfTotalRevenue.toFixed(2)}%` : 'N/A'}</StyledTableCell>
-                            <StyledTableCell>-</StyledTableCell>
-                            <StyledTableCell>Summary</StyledTableCell>
-                            <StyledTableCell>-</StyledTableCell>
-                        </StyledTableRow>
-                    )}
+                {summaryData && (
+  <StyledTableRow>
+    <SummaryTableCell>
+      <Button 
+        variant="contained" 
+        color="secondary" 
+        onClick={handleCompare} 
+        disabled={selectedForComparison.length === 0}
+        size="small"
+      >
+        Compare
+      </Button>
+    </SummaryTableCell>
+    <SummaryTableCell></SummaryTableCell>
+    <SummaryTableCell></SummaryTableCell>
+    <SummaryTableCell>{formatValue(summaryData.price, true)}</SummaryTableCell>
+    <SummaryTableCell>{formatValue(summaryData.reviews)}</SummaryTableCell>
+    <SummaryTableCell>{formatValue(summaryData.sales)}</SummaryTableCell>
+    <SummaryTableCell></SummaryTableCell>
+    <SummaryTableCell>{formatValue(summaryData.revenue, true)}</SummaryTableCell>
+    <SummaryTableCell></SummaryTableCell>
+    <SummaryTableCell></SummaryTableCell>
+    <SummaryTableCell></SummaryTableCell>
+    <SummaryTableCell></SummaryTableCell>
+  </StyledTableRow>
+)}
                     {sortedData.filter(product => product.asin !== 'Summary').map((product, index) => (
                         <StyledTableRow key={product.asin || index}>
                             <StyledTableCell>
