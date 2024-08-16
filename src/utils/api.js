@@ -1,5 +1,3 @@
-// api.js
-// api.js
 import { 
   fetchSegmentedFeatures as groqFetchSegmentedFeatures, 
   generateKeywords as groqGenerateKeywords, 
@@ -14,10 +12,14 @@ import {
   fetchCombinedFeatureSummaryWithBackoff as openAIFetchCombinedFeatureSummaryWithBackoff
 } from './gpt';
 
+import { 
+  fetchSegmentedFeatures as anthropicFetchSegmentedFeatures 
+} from './anthropic';
+
 const serverUrl = 'http://localhost:3000'; // Use your server URL
 
 // Helper function to make server requests
-const fetchFromServer = async (endpoint, body) => {
+export const fetchFromServer = async (endpoint, body) => {
   console.log(`Sending request to ${endpoint} with body:`, body);
   try {
     const response = await fetch(`${serverUrl}${endpoint}`, {
@@ -39,32 +41,20 @@ const fetchFromServer = async (endpoint, body) => {
   }
 };
 
-// Helper function to create message payloads
-const createMessagePayload = (systemContent, userContent) => ([
-  { role: "system", content: systemContent },
-  { role: "user", content: userContent },
-]);
-
-// Consolidated fetch function for OpenAI chat completion
-const fetchChatCompletion = async (systemContent, userContent, maxTokens) => {
-  const messages = createMessagePayload(systemContent, userContent);
-  return await fetchFromServer('/api/openai/chat', { messages, maxTokens });
-};
-
-// Fetch segmented features using the appropriate API provider
 export const fetchSegmentedFeatures = async (products, featureBatchSize, maxTokens, apiProvider) => {
   console.log(`Fetching segmented features using ${apiProvider}`);
   switch(apiProvider) {
-    case 'groq':
-      return await groqFetchSegmentedFeatures(products, featureBatchSize, maxTokens);
+    case 'anthropic':
+      return await anthropicFetchSegmentedFeatures(products, featureBatchSize, maxTokens);
     case 'openai':
       return await openAIFetchSegmentedFeatures(products, featureBatchSize, maxTokens);
+    case 'groq':
+      return await groqFetchSegmentedFeatures(products, featureBatchSize, maxTokens);
     default:
       throw new Error(`Unsupported API provider: ${apiProvider}`);
   }
 };
 
-// Generate keywords using the appropriate API provider
 export const generateKeywords = async (keywords, maxTokens, apiProvider) => {
   console.log(`Generating keywords using ${apiProvider}`);
   switch(apiProvider) {
@@ -77,7 +67,6 @@ export const generateKeywords = async (keywords, maxTokens, apiProvider) => {
   }
 };
 
-// Generate more keywords using the appropriate API provider
 export const generateMoreKeywords = async (originalKeyword, newKeyword, maxTokens, apiProvider) => {
   console.log(`Generating more keywords using ${apiProvider}`);
   switch(apiProvider) {
@@ -90,7 +79,6 @@ export const generateMoreKeywords = async (originalKeyword, newKeyword, maxToken
   }
 };
 
-// Feature summary function
 export const fetchFeatureSummaryWithBackoff = async (featureBullets, attributes, images, apiProvider) => {
   console.log(`Fetching feature summary using ${apiProvider}`);
   const featureText = featureBullets.join('\n');
@@ -123,7 +111,6 @@ export const fetchCombinedFeatureSummaryWithBackoff = async (allFeatures, apiPro
   }
 };
 
-// Simulate API call to fetch product details
 export const fetchProductDetails = async (asins, apiProvider) => {
   console.log(`Fetching details for ASINs: ${asins.join(', ')} using ${apiProvider}`);
   
@@ -139,7 +126,6 @@ export const fetchProductDetails = async (asins, apiProvider) => {
   }));
 };
 
-// Fetch with exponential backoff
 export const fetchWithExponentialBackoff = async (fetchFunction, args = [], retries = 5, delay = 1000) => {
   try {
     return await fetchFunction(...args);
@@ -155,7 +141,7 @@ export const fetchWithExponentialBackoff = async (fetchFunction, args = [], retr
   }
 };
 
-export default {
+const apiUtils = {
   fetchSegmentedFeatures,
   generateKeywords,
   generateMoreKeywords,
@@ -163,4 +149,7 @@ export default {
   fetchCombinedFeatureSummaryWithBackoff,
   fetchProductDetails,
   fetchWithExponentialBackoff,
+  fetchFromServer,
 };
+
+export default apiUtils;

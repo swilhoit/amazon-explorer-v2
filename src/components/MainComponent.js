@@ -1,7 +1,7 @@
 // MainComponent.js
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Typography, Box, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  Typography, Box, LinearProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Container, Checkbox, Slider, Collapse, IconButton, Link, Button
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
@@ -15,6 +15,7 @@ import { updateSummary, getPriceSegments, processData, formatNumberWithCommas } 
 import FeatureSegments from './FeatureSegments';
 import { useApi } from '../ApiContext';
 import Settings from './settings';
+
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
   backgroundColor: theme.palette.common.black,
@@ -457,6 +458,12 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords, tri
     updateSettings(newSettings); // Update the context
   }, [updateSettings]);
 
+  const handleRecycleSegment = useCallback(async (segmentProducts) => {
+    console.log("Re-segmenting products:", segmentProducts);
+    await handleFeatureSegmentation(segmentProducts);
+}, [handleFeatureSegmentation]);
+
+
   return (
     <Container>
       
@@ -643,7 +650,7 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords, tri
       </div>
       <div role="tabpanel" hidden={activeTab !== 4} id="tabpanel-4" aria-labelledby="tab-4">
         {activeTab === 4 && (
-          loading ? <CircularProgress /> : <ProductComparison products={comparisonProducts} />
+          loading ? <LinearProgress /> : <ProductComparison products={comparisonProducts} />
         )}
       </div>
       <div role="tabpanel" hidden={activeTab !== 5} id="tabpanel-5" aria-labelledby="tab-5">
@@ -656,6 +663,7 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords, tri
               currentKeyword={keywords}
               segments={featureSegments}
               loading={loading}
+              onRecycleSegment={handleRecycleSegment}
             />
           </>
         )}

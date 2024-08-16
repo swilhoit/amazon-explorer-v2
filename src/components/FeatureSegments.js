@@ -59,7 +59,7 @@ const KeywordTitle = styled(Typography)(({ theme }) => ({
   fontSize: '1.5rem',
 }));
 
-const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, loading }) => {
+const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, loading, onRecycleSegment}) => {
     const [viewMode, setViewMode] = useState('cards');
     const [orderBy, setOrderBy] = useState('totalRevenue');
     const [order, setOrder] = useState('desc');
@@ -280,6 +280,11 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
             return <Typography>No segments data available</Typography>;
         }
 
+        const handleRecycleSegment = (segment) => {
+            console.log("Recycling segment:", segment.name);
+            onRecycleSegment(segment.products);
+        };
+
         return (
             <Grid container spacing={2}>
                 {sortedSegments.map((segment, index) => (
@@ -331,7 +336,7 @@ const FeatureSegments = ({ data, onSegmentSelect, currentKeyword, segments, load
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
                                     <IconButton
                                         color="primary"
-                                        onClick={() => {/* Placeholder function */}}
+                                        onClick={() => handleRecycleSegment(segment)}
                                         size="small"
                                         sx={{ mr: 1 }}
                                     >

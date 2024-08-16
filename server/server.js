@@ -46,7 +46,7 @@ app.post('/api/anthropic/chat', async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error calling Anthropic API:', error);
-    res.status(500).json({ error: 'An error occurred while processing your request' });
+    res.status(500).json({ error: 'An error occurred while processing your request', details: error.message });
   }
 });
 
@@ -54,7 +54,12 @@ app.post('/api/anthropic/chat', async (req, res) => {
 app.post('/api/openai/chat', async (req, res) => {
   try {
     const { messages, maxTokens, temperature = 0.3, topP = 0.8 } = req.body;
-    console.log('Calling OpenAI API...');
+    console.log('Calling OpenAI API with payload:', JSON.stringify({ messages, maxTokens, temperature, topP }, null, 2));
+    
+    if (!OPENAI_API_KEY) {
+      throw new Error('OpenAI API key is missing');
+    }
+
     const response = await axios.post(OPENAI_API_URL, {
       model: "gpt-4",
       messages,
@@ -67,16 +72,27 @@ app.post('/api/openai/chat', async (req, res) => {
         'Authorization': `Bearer ${OPENAI_API_KEY}`
       }
     });
-    console.log('OpenAI API Response:', response.data);
+    
+    console.log('OpenAI API Response:', JSON.stringify(response.data, null, 2));
     res.json(response.data);
   } catch (error) {
     console.error('Error calling OpenAI API:', error);
     if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-      console.error('Response headers:', error.response.headers);
+      console.error('OpenAI API Error Response:', {
+        data: error.response.data,
+        status: error.response.status,
+        headers: error.response.headers,
+      });
+    } else if (error.request) {
+      console.error('No response received from OpenAI API:', error.request);
+    } else {
+      console.error('Error setting up OpenAI API request:', error.message);
     }
-    res.status(500).json({ error: 'An error occurred while processing your request' });
+    res.status(500).json({ 
+      error: 'An error occurred while processing your request', 
+      details: error.message,
+      openAIError: error.response ? error.response.data : null
+    });
   }
 });
 
@@ -97,7 +113,7 @@ app.post('/api/groq/chat', async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Error calling Groq API:', error);
-    res.status(500).json({ error: 'An error occurred while processing your request' });
+    res.status(500).json({ error: 'An error occurred while processing your request', details: error.message });
   }
 });
 

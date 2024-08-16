@@ -1,3 +1,5 @@
+import fetchFromServer from './api'; 
+
 // src/utils/anthropic.js
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -33,58 +35,31 @@ const createChatCompletion = async (messages, maxTokens, temperature = 0.3, topP
 };
 
 export const fetchSegmentedFeatures = async (products, featureBatchSize, maxTokens) => {
-  const fetchBatch = async (batch) => {
-    const prompt = `Group similar products into segments based on their defining features that make them unique found in the title. Ensure all products in this list are assigned a segment. There should be a maximum of 10 segments total with a minimum of 2 products in each segment. Combine any segments that are very similar to avoid redundancy.\n${batch.map((p) => `${p.title} (ASIN: ${p.asin})`).join('\n')}\n\nProvide the result as a list of segments, where each segment includes a name and the list of products (titles and ASINs) that belong to it.`;
-
-    return await createChatCompletion([
-      {
-        role: "system",
-        content: "You are an assistant for analyzing product titles in order to group a list of products into segments based on their defining features.",
-      },
-      { role: "user", content: prompt },
-    ], maxTokens);
-  };
-
-  const batchProducts = [];
-  for (let i = 0; i < products.length; i += featureBatchSize) {
-    batchProducts.push(products.slice(i, i + featureBatchSize));
-  }
-
   const allResults = [];
 
-  const processBatches = async (batches) => {
-    const batchPromises = [];
-    while (batches.length > 0) {
-      if (batchPromises.length < 10) {
-        const batch = batches.shift();
-        const batchPromise = fetchBatch(batch)
-          .then((result) => {
-            allResults.push(result);
-            batchPromises.splice(batchPromises.indexOf(batchPromise), 1);
-          })
-          .catch((error) => {
-            console.error("Error processing batch:", error);
-          });
-        batchPromises.push(batchPromise);
-      } else {
-        await Promise.race(batchPromises);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-    await Promise.all(batchPromises);
-  };
+  for (let i = 0; i < products.length; i += featureBatchSize) {
+      const batch = products.slice(i, i + featureBatchSize);
+      const prompt = `Group similar products into segments based on their defining features found in the title. ... \n${batch.map((p) => `${p.title} (ASIN: ${p.asin})`).join('\n')}`;
 
-  await processBatches(batchProducts);
+      const response = await fetchFromServer('/api/anthropic/chat', {
+          messages: [
+              { role: "system", content: "You are an assistant for analyzing product titles..." },
+              { role: "user", content: prompt },
+          ],
+          maxTokens,
+      });
 
-  const jsonPrompt = `Convert the following segmented product list to JSON format, including segment names and lists of products with their titles and ASINs:\n\n${allResults.join('\n\n')}`;
+      allResults.push(response);
+  }
 
-  const jsonResult = await createChatCompletion([
-    {
-      role: "system",
-      content: "You are an assistant for converting product segments to JSON format.",
-    },
-    { role: "user", content: jsonPrompt },
-  ], maxTokens);
+  const finalPrompt = `Convert the following segmented product list to JSON format... \n\n${allResults.join('\n\n')}`;
+  const jsonResult = await fetchFromServer('/api/anthropic/chat', {
+      messages: [
+          { role: "system", content: "You are an assistant for converting product segments to JSON format." },
+          { role: "user", content: finalPrompt },
+      ],
+      maxTokens,
+  });
 
   return JSON.parse(jsonResult);
 };

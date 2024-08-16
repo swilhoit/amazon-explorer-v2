@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from './AuthContext';
+import { useApi } from './ApiContext';
 import {
   Container, Box, Typography, IconButton, AppBar, Toolbar, Drawer, List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem, TextField, CssBaseline, Button, Alert
 } from '@mui/material';
@@ -20,6 +21,8 @@ import { fetchProductDatabaseQuery } from './utils/junglescout';
 import { processData } from './utils/dataProcessing';
 
 const Layout = () => {
+  const { settings, updateSettings } = useApi(); // Get settings and updateSettings from context
+  const { isAuthenticated, logout } = useContext(AuthContext);
   const [darkMode, setDarkMode] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
@@ -30,12 +33,10 @@ const Layout = () => {
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const { isAuthenticated, logout, settings, updateSettings } = useContext(AuthContext);
 
   useEffect(() => {
-    console.log('Current path:', location.pathname);
-    console.log('Is authenticated:', isAuthenticated);
-  }, [location.pathname, isAuthenticated]);
+    console.log('Current API provider:', settings.apiProvider);
+  }, [settings.apiProvider]);
 
   const handleThemeToggle = () => {
     setDarkMode(!darkMode);
@@ -146,7 +147,6 @@ const Layout = () => {
         '"Segoe UI Symbol"',
       ].join(','),
     },
-    // ... (rest of the theme configuration)
   });
 
   const menuItems = [

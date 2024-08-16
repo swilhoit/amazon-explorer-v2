@@ -1,4 +1,3 @@
-// Settings.js
 import React, { useState, useEffect } from 'react';
 import {
   Container,
@@ -10,6 +9,7 @@ import {
   TextField,
   Button,
   Box,
+  Snackbar,
 } from '@mui/material';
 
 const Settings = ({ onSave, initialSettings }) => {
@@ -17,8 +17,9 @@ const Settings = ({ onSave, initialSettings }) => {
     featureBatchSize: 20,
     maxTokens: 8000,
     apiProvider: 'groq',
-    ...initialSettings
+    ...initialSettings,
   });
+  const [openSnackbar, setOpenSnackbar] = useState(false);
 
   useEffect(() => {
     if (initialSettings) {
@@ -30,12 +31,21 @@ const Settings = ({ onSave, initialSettings }) => {
     const { name, value } = event.target;
     setSettings((prevSettings) => ({
       ...prevSettings,
-      [name]: value,
+      [name]: name === 'featureBatchSize' || name === 'maxTokens' ? Number(value) : value,
     }));
   };
 
   const handleSave = () => {
     onSave(settings);
+    setOpenSnackbar(true);
+    console.log('Settings saved:', settings);
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setOpenSnackbar(false);
   };
 
   return (
@@ -52,6 +62,7 @@ const Settings = ({ onSave, initialSettings }) => {
             value={settings.featureBatchSize}
             onChange={handleChange}
             fullWidth
+            inputProps={{ min: 1 }}
           />
         </FormControl>
         <FormControl fullWidth sx={{ mb: 2 }}>
@@ -62,6 +73,7 @@ const Settings = ({ onSave, initialSettings }) => {
             value={settings.maxTokens}
             onChange={handleChange}
             fullWidth
+            inputProps={{ min: 1 }}
           />
         </FormControl>
         <FormControl fullWidth sx={{ mb: 2 }}>
@@ -81,6 +93,16 @@ const Settings = ({ onSave, initialSettings }) => {
           Save
         </Button>
       </Box>
+      <Snackbar
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'center',
+        }}
+        open={openSnackbar}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        message="Settings saved successfully"
+      />
     </Container>
   );
 };

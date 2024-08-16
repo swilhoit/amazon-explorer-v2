@@ -16,8 +16,8 @@ export const fetchProductDatabaseQuery = async (searchParams) => {
   const baseUrl = 'https://developer.junglescout.com/api/product_database_query';
   const queryParams = new URLSearchParams({
     marketplace: searchParams.marketplace || 'us',
-    sort: searchParams.sort || 'name',
-    'page[size]': searchParams.pageSize || 50,
+    sort: searchParams.sort || '-revenue',
+    'page[size]': searchParams.pageSize || 100,
   });
 
   const url = `${baseUrl}?${queryParams.toString()}`;
