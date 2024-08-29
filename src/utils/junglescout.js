@@ -1,4 +1,5 @@
 import axios from 'axios';
+// import mockData from './test.json'
 
 // API key and header configurations
 const apiKey = process.env.REACT_APP_JUNGLE_SCOUT_API_KEY;
@@ -37,6 +38,7 @@ export const fetchProductDatabaseQuery = async (searchParams) => {
     const response = await axios.post(url, payload, { headers });
     console.log('API Request Successful:', response);
     return response.data;
+    // return mockData;
   } catch (error) {
     console.error("Error fetching product database query results:", error);
     if (error.response) {

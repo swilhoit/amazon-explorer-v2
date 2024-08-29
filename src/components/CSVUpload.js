@@ -2,6 +2,7 @@ import React from 'react';
 import { useCSVReader } from 'react-papaparse';
 import { Button } from '@mui/material';
 import { processData } from '../utils/dataProcessing';
+import SearchIcon from "@mui/icons-material/Search";
 
 const CSVUpload = ({ onDataUpload, setLoading }) => {
     const { CSVReader } = useCSVReader();
@@ -40,9 +41,12 @@ const CSVUpload = ({ onDataUpload, setLoading }) => {
         >
             {({ getRootProps, acceptedFile, ProgressBar, getRemoveFileProps }) => (
                 <>
-                    <Button variant="contained" {...getRootProps()}>
+                    <button
+                        className="btn border-gray-200 dark:border-gray-700/60 shadow-sm text-violet-500 disabled:opacity-50 mr-2"
+                        {...getRootProps()}
+                    >
                         Upload
-                    </Button>
+                    </button>
                 </>
             )}
         </CSVReader>
