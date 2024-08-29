@@ -34,7 +34,10 @@ module.exports = {
       "os": require.resolve("os-browserify/browser"),
       "crypto": require.resolve("crypto-browserify"),
       "process": require.resolve("process/browser.js") // Add .js extension here
-    }
+    },
+    alias: {
+      '@tailwindConfig': path.resolve(__dirname, 'tailwind.config.js'),
+    },
   },
   plugins: [
     new HtmlWebpackPlugin({

@@ -19,11 +19,13 @@ import Settings from './components/settings';
 import RelatedKeywords from './components/RelatedKeywords';
 import { fetchProductDatabaseQuery } from './utils/junglescout';
 import { processData } from './utils/dataProcessing';
+import { useThemeProvider } from "./contexts/ThemeContext";
+import Header from "./components/Header";
+import Sidebar from "./components/Sidebar";
 
 const Layout = () => {
   const { settings, updateSettings } = useApi(); // Get settings and updateSettings from context
   const { isAuthenticated, logout } = useContext(AuthContext);
-  const [darkMode, setDarkMode] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,6 +35,11 @@ const Layout = () => {
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const { currentTheme, changeCurrentTheme } = useThemeProvider();
+  const [darkMode, setDarkMode] = useState(currentTheme === 'dark');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+
 
   useEffect(() => {
     console.log('Current API provider:', settings.apiProvider);
@@ -40,6 +47,7 @@ const Layout = () => {
 
   const handleThemeToggle = () => {
     setDarkMode(!darkMode);
+    changeCurrentTheme(currentTheme === "light" ? "dark" : "light")
   };
 
   const handleMenu = (event) => {
@@ -163,98 +171,116 @@ const Layout = () => {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: 'flex' }}>
-        <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, boxShadow: 'none', borderBottom: '1px solid rgba(0, 0, 0, 0.12)' }}>
-          <Toolbar>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              Amazon Explorer
-            </Typography>
-            <TextField
-              label="Search for products (comma-separated keywords)"
-              variant="outlined"
-              size="small"
-              value={searchKeywords}
-              onChange={(e) => setSearchKeywords(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleSearch();
-                }
-              }}
-              sx={{ mr: 2, background: 'white', borderRadius: 1, width: '300px' }}
-            />
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleSearch}
-              startIcon={<SearchIcon />}
-              disabled={isLoading}
-              sx={{ mr: 2 }}
-            >
-              {isLoading ? 'Searching...' : 'Search'}
-            </Button>
-            <CSVUpload
-              onDataUpload={handleCSVUpload}
-              setLoading={() => {}}
-              buttonText="Upload"
-            />
-            <IconButton onClick={handleThemeToggle} color="inherit" sx={{ ml: 1 }}>
-              {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
-            </IconButton>
-            {isAuthenticated && (
-              <div>
-                <IconButton
-                  aria-controls="account-menu"
-                  aria-haspopup="true"
-                  onClick={handleMenu}
-                  color="inherit"
-                >
-                  <AccountCircle />
-                  </IconButton>
-                <Menu
-                  id="account-menu"
-                  anchorEl={anchorEl}
-                  open={Boolean(anchorEl)}
-                  onClose={handleClose}
-                  keepMounted
-                >
-                  <MenuItem onClick={() => navigate('/account-history')}>Account History</MenuItem>
-                  <MenuItem onClick={() => navigate('/settings')}>Settings</MenuItem>
-                  <MenuItem onClick={logout}>Logout</MenuItem>
-                </Menu>
-              </div>
-            )}
-          </Toolbar>
-        </AppBar>
+      <div className="flex flex-col">
+        {/*Header*/}
+        <Header
+            sidebarOpen={sidebarOpen}
+            setSidebarOpen={setSidebarOpen}
+            searchKeywords={searchKeywords}
+            setSearchKeywords={setSearchKeywords}
+            handleSearch={handleSearch}
+            isLoading={isLoading}
+            handleCSVUpload={handleCSVUpload}
+        />
+        {/*<AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, boxShadow: 'none', borderBottom: '1px solid rgba(0, 0, 0, 0.12)' }}>*/}
+        {/*  <Toolbar>*/}
+        {/*    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>*/}
+        {/*      Amazon Explorer*/}
+        {/*    </Typography>*/}
+        {/*      <input*/}
+        {/*          id="name"*/}
+        {/*          className="form-input min-w-[380px] mr-4"*/}
+        {/*          value={searchKeywords}*/}
+        {/*          placeholder="Search for products (comma-separated keywords)"*/}
+        {/*          onChange={(e) => setSearchKeywords(e.target.value)}*/}
+        {/*          onKeyDown={(e) => {*/}
+        {/*            if (e.key === 'Enter') {*/}
+        {/*              e.preventDefault();*/}
+        {/*              handleSearch();*/}
+        {/*            }*/}
+        {/*          }}*/}
+
+        {/*      />*/}
+        {/*    <Button*/}
+        {/*      variant="contained"*/}
+        {/*      color="primary"*/}
+        {/*      onClick={handleSearch}*/}
+        {/*      startIcon={<SearchIcon />}*/}
+        {/*      disabled={isLoading}*/}
+        {/*      sx={{ mr: 2 }}*/}
+        {/*    >*/}
+        {/*      {isLoading ? 'Searching...' : 'Search'}*/}
+        {/*    </Button>*/}
+        {/*    <CSVUpload*/}
+        {/*      onDataUpload={handleCSVUpload}*/}
+        {/*      setLoading={() => {}}*/}
+        {/*      buttonText="Upload"*/}
+        {/*    />*/}
+        {/*    <IconButton onClick={handleThemeToggle} color="inherit" sx={{ ml: 1 }}>*/}
+        {/*      {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}*/}
+        {/*    </IconButton>*/}
+        {/*    {isAuthenticated && (*/}
+        {/*      <div>*/}
+        {/*        <IconButton*/}
+        {/*          aria-controls="account-menu"*/}
+        {/*          aria-haspopup="true"*/}
+        {/*          onClick={handleMenu}*/}
+        {/*          color="inherit"*/}
+        {/*        >*/}
+        {/*          <AccountCircle />*/}
+        {/*          </IconButton>*/}
+        {/*        <Menu*/}
+        {/*          id="account-menu"*/}
+        {/*          anchorEl={anchorEl}*/}
+        {/*          open={Boolean(anchorEl)}*/}
+        {/*          onClose={handleClose}*/}
+        {/*          keepMounted*/}
+        {/*        >*/}
+        {/*          <MenuItem onClick={() => navigate('/account-history')}>Account History</MenuItem>*/}
+        {/*          <MenuItem onClick={() => navigate('/settings')}>Settings</MenuItem>*/}
+        {/*          <MenuItem onClick={logout}>Logout</MenuItem>*/}
+        {/*        </Menu>*/}
+        {/*      </div>*/}
+        {/*    )}*/}
+        {/*  </Toolbar>*/}
+        {/*</AppBar>*/}
+        {/*Sidebar*/}
         {isAuthenticated && (
-          <Drawer
-            variant="permanent"
-            sx={{
-              width: 240,
-              flexShrink: 0,
-              [`& .MuiDrawer-paper`]: { width: 240, boxSizing: 'border-box' },
-            }}
-          >
-            <Toolbar />
-            <Box sx={{ overflow: 'auto', p: 2 }}>
-              <List>
-                {menuItems.map((item) => (
-                  <ListItem
-                    button
-                    key={item.text}
-                    onClick={() => handleTabChange(item.index)}
-                    selected={activeTab === item.index}
-                    sx={{ mb: 1 }}
-                  >
-                    <ListItemIcon>{item.icon}</ListItemIcon>
-                    <ListItemText primary={item.text} />
-                  </ListItem>
-                ))}
-              </List>
-            </Box>
-          </Drawer>
+          // <Drawer
+          //   variant="permanent"
+          //   sx={{
+          //     width: 240,
+          //     flexShrink: 0,
+          //     [`& .MuiDrawer-paper`]: { width: 240, boxSizing: 'border-box' },
+          //   }}
+          // >
+          //   <Toolbar />
+          //   <Box sx={{ overflow: 'auto', p: 2 }}>
+          //     <List>
+          //       {menuItems.map((item) => (
+          //         <ListItem
+          //           button
+          //           key={item.text}
+          //           onClick={() => handleTabChange(item.index)}
+          //           selected={activeTab === item.index}
+          //           sx={{ mb: 1 }}
+          //         >
+          //           <ListItemIcon>{item.icon}</ListItemIcon>
+          //           <ListItemText primary={item.text} />
+          //         </ListItem>
+          //       ))}
+          //     </List>
+          //   </Box>
+          // </Drawer>
+            <Sidebar
+                sidebarOpen={sidebarOpen}
+                setSidebarOpen={setSidebarOpen}
+                menuItems={menuItems}
+                handleTabChange={handleTabChange}
+                activeTab={activeTab}
+            />
         )}
-        <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8 }}>
+        <div className="pl-[300px] pr-0 md:pr-[40px] py-8">
           <Container>
             {errorMessage && (
               <Alert severity="error" sx={{ mb: 2 }}>
@@ -291,8 +317,8 @@ const Layout = () => {
               </>
             )}
           </Container>
-        </Box>
-      </Box>
+        </div>
+      </div>
     </ThemeProvider>
   );
 };

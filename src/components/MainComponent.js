@@ -8,6 +8,7 @@ import { styled } from '@mui/material/styles';
 import { ExpandMore, ExpandLess, Delete } from '@mui/icons-material';
 import DataTable from './DataTable';
 import { ScatterPlot, PieCharts, TimelineChart } from './Charts';
+import LineChart from '../components/LineChart'
 import ProductComparison from './ProductComparison';
 import { fetchProductDetails, fetchSegmentedFeatures } from '../utils/api';
 import { fetchDataForKeywords } from '../utils/junglescout';
@@ -15,6 +16,7 @@ import { updateSummary, getPriceSegments, processData, formatNumberWithCommas } 
 import FeatureSegments from './FeatureSegments';
 import { useApi } from '../ApiContext';
 import Settings from './settings';
+import DataTableNew from "./DataTableNew";
 
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
@@ -53,7 +55,7 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords, tri
   const { settings, updateSettings } = useApi();
   const [data, setData] = useState([]);
   const [allData, setAllData] = useState([]);
-  const [summaryData, setSummaryData] = useState(null);
+  const [summaryData, setSummaryData] = useState({});
   const [loading, setLoading] = useState(false);
   const [resultsCount, setResultsCount] = useState(0);
   const [priceSegmentIncrement, setPriceSegmentIncrement] = useState(5);
@@ -409,6 +411,12 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords, tri
     });
   }, []);
 
+  const handleSelectAll = useCallback(() => {
+    setSelectedForComparison(prev => (data.length - 1) === prev.length ? [] : data.reduce((acc, item) => {
+      return item.asin === 'Summary' ? acc : [...acc, item.asin]
+    }, []));
+  }, [data]);
+
   const handleRequestSort = useCallback((property) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
@@ -468,31 +476,36 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords, tri
     <Container>
       
       {currentSegment && (
-        <Button variant="outlined" onClick={handleResetToAllData} style={{ marginBottom: '1rem' }}>
+        <button
+            className="btn border-gray-200 dark:border-gray-700/60 shadow-sm text-violet-500 mb-4"
+            onClick={handleResetToAllData}
+        >
           Reset to All Data
-        </Button>
+        </button>
       )}
       {errorMessage && (
         <Typography color="error" gutterBottom>
           {errorMessage}
         </Typography>
       )}
-      <Typography variant="subtitle1" gutterBottom>
+      {activeTab !== 0 && activeTab !== 5 && <p className="font-bold mb-4">
         Total Results: {resultsCount}
-      </Typography>
-      <div role="tabpanel" hidden={activeTab !== 0} id="tabpanel-0" aria-labelledby="tab-0">
+      </p>}
+      <div className="flex flex-col gap-[30px]" role="tabpanel" hidden={activeTab !== 0} id="tabpanel-0" aria-labelledby="tab-0">
         {activeTab === 0 && (
-          <DataTable
-            data={data}
-            summaryData={summaryData}
-            handleCheckboxChange={handleCheckboxChange}
-            selectedForComparison={selectedForComparison}
-            handleRequestSort={handleRequestSort}
-            order={order}
-            orderBy={orderBy}
-            handleCompare={handleCompare}
-            handleDeleteRow={handleDeleteRow}
-          />
+            <DataTableNew
+                data={data}
+                summaryData={summaryData}
+                handleCheckboxChange={handleCheckboxChange}
+                handleSelectAll={handleSelectAll}
+                selectedForComparison={selectedForComparison}
+                handleRequestSort={handleRequestSort}
+                order={order}
+                orderBy={orderBy}
+                handleCompare={handleCompare}
+                handleDeleteRow={handleDeleteRow}
+                resultsCount={resultsCount}
+            />
         )}
       </div>
       <div role="tabpanel" hidden={activeTab !== 1} id="tabpanel-1" aria-labelledby="tab-1">
@@ -629,23 +642,11 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords, tri
       </div>
       <div role="tabpanel" hidden={activeTab !== 3} id="tabpanel-3" aria-labelledby="tab-3">
         {activeTab === 3 && (
-          <>
-            <Box mt={4}>
-              <Typography variant="h6" component="h2" gutterBottom>
-                Price vs Sales Scatter Plot
-              </Typography>
-              <ScatterPlot data={data.filter(item => item.asin !== 'Summary')} />
-            </Box>
-            <Box mt={4}>
-              <PieCharts data={data.filter(item => item.asin !== 'Summary')} />
-            </Box>
-            <Box mt={4}>
-              <Typography variant="h6" component="h2" gutterBottom>
-                Timeline of Dates First Available
-              </Typography>
-              <TimelineChart data={data.filter(item => item.asin !== 'Summary')} />
-            </Box>
-          </>
+          <div className="flex flex-col gap-4">
+            <ScatterPlot data={data.filter(item => item.asin !== 'Summary')} />
+            <PieCharts data={data.filter(item => item.asin !== 'Summary')} />
+            <TimelineChart data={data.filter(item => item.asin !== 'Summary')} />
+          </div>
         )}
       </div>
       <div role="tabpanel" hidden={activeTab !== 4} id="tabpanel-4" aria-labelledby="tab-4">
@@ -656,14 +657,14 @@ const MainComponent = ({ uploadedData, activeTab, handleTabChange, keywords, tri
       <div role="tabpanel" hidden={activeTab !== 5} id="tabpanel-5" aria-labelledby="tab-5">
         {activeTab === 5 && (
           <>
-            
-            <FeatureSegments 
+            <FeatureSegments
               data={allData} 
               onSegmentSelect={handleSegmentSelect}
               currentKeyword={keywords}
               segments={featureSegments}
               loading={loading}
               onRecycleSegment={handleRecycleSegment}
+              resultsCount={resultsCount}
             />
           </>
         )}
